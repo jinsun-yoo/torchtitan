@@ -11,6 +11,8 @@ from datetime import timedelta
 
 import torch
 from torch.distributed.elastic.multiprocessing.errors import record
+from functorch.compile import make_boxed_func
+from torch._dynamo.backends.common import aot_autograd
 
 from torchtitan import utils
 from torchtitan.checkpoint import CheckpointManager, TrainState
@@ -176,6 +178,19 @@ def main(job_config: JobConfig):
         model.train()
 
         model_parts = [model]
+        
+
+    def custom_backend(gm: torch.fx.GraphModule, list_sample):
+        if os.environ['LOCAL_RANK'] != '0':
+            return make_boxed_func(gm.forward)
+
+        for node in gm.graph.nodes:
+            print(node.name)
+            print(node.target)
+        return make_boxed_func(gm.forward) 
+
+    model = torch.compile(model, backend=aot_autograd(fw_compiler=custom_backend))
+
 
     gpu_mem_stats = gpu_memory_monitor.get_peak_stats()
     logger.info(
