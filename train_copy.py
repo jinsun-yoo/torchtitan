@@ -87,7 +87,10 @@ def main(job_config: JobConfig):
     reduce_dtype=TORCH_DTYPE_MAP[job_config.training.mixed_precision_reduce]
     mp_policy = MixedPrecisionPolicy(param_dtype=param_dtype, reduce_dtype=reduce_dtype)
     fsdp_config = {"mesh": world_mesh, "mp_policy": mp_policy}
-    model = fully_shard(model, **fsdp_config)
+
+    for layer_id, transformer_block in model.layers.named_children():
+        transformer_block = torch.compile(transformer_block, fullgraph=True)
+        model.layers.register_module(layer_id, transformer_block)
 
     # move sharded model to CPU/GPU and initialize weights via DTensor
     model.to_empty(device="cuda")

@@ -32,6 +32,7 @@ from torchtitan.profiling import maybe_enable_memory_snapshot, maybe_enable_prof
 
 
 def get_train_context(enable_loss_parallel: bool, enable_compiled_autograd: bool):
+    print(enable_compiled_autograd)
     @contextlib.contextmanager
     def context():
         with contextlib.ExitStack() as stack:
@@ -189,7 +190,7 @@ def main(job_config: JobConfig):
             print(node.target)
         return make_boxed_func(gm.forward) 
 
-    model = torch.compile(model, backend=aot_autograd(fw_compiler=custom_backend))
+    #model = torch.compile(model, backend=aot_autograd(fw_compiler=custom_backend))
 
 
     gpu_mem_stats = gpu_memory_monitor.get_peak_stats()
