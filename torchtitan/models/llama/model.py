@@ -20,7 +20,9 @@ from torchtitan.models.norms import build_norm
 @dataclass
 class ModelArgs:
     dim: int = 4096
-    n_layers: int = 32
+    n_layers: int = 2
+    # TODO: TEmporarlly, use only 2 layers for easy debugging, etc.
+    # n_layers: int = 32
     n_heads: int = 32
     n_kv_heads: Optional[int] = None
     vocab_size: int = -1  # defined later by tokenizer

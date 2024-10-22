@@ -1,0 +1,144 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python Debugger: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "TP+FSDP2",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/usr/local/bin/torchrun",
+            "console": "integratedTerminal",
+            "cwd": "/workspace/torchtitan",
+            "args": [
+                "--nproc_per_node", "4",
+                "--rdzv_backend", "c10d",
+                "--rdzv_endpoint", "localhost:0",
+                "--local-ranks-filter", "0",
+                "--role", "rank",
+                "--tee", "3",
+                "train.py",
+                "--job.config_file", "./train_configs/llama2_7b_tp.toml"
+            ],
+            "env": {
+            },
+            //     "TORCH_LOGS": "+dynamo,dynamic,+dtensor,c10d,bytecode,+inductor",
+            //     "TORCH_LOGS_OUT": "test_try_find_inductor_nanogpt_split.txt"
+            // },
+            "justMyCode": false
+        },
+        {
+            "name": "Uncompiled 1D FSDP2",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/usr/local/bin/torchrun",
+            "console": "integratedTerminal",
+            "cwd": "/workspace/torchtitan",
+            "args": [
+                "--nproc_per_node", "8",
+                "--rdzv_backend", "c10d",
+                "--rdzv_endpoint", "localhost:0",
+                "--local-ranks-filter", "0",
+                "--role", "rank",
+                "--tee", "3",
+                "train.py",
+                "--job.config_file", "./train_configs/llama2_7b.toml"
+            ],
+            "env": {
+                //"PYTORCH_CUDA_ALLOC_CONF":"expandable_segments:True"
+            },
+            //     "TORCH_LOGS": "+dynamo,dynamic,+dtensor,c10d,bytecode,+inductor",
+            //     "TORCH_LOGS_OUT": "test_try_find_inductor_nanogpt_split.txt"
+            // },
+            "justMyCode": false
+        },
+        {
+            "name": "Uncompiled 2D FSDP2+TP",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/usr/local/bin/torchrun",
+            "console": "integratedTerminal",
+            "cwd": "/workspace/torchtitan",
+            "args": [
+                "--nproc_per_node", "8",
+                "--rdzv_backend", "c10d",
+                "--rdzv_endpoint", "localhost:0",
+                "--local-ranks-filter", "0",
+                "--role", "rank",
+                "--tee", "3",
+                "train.py",
+                "--job.config_file", "./train_configs/llama2_7b_tp.toml",
+                "--training.steps", "1"
+            ],
+            "env": {
+                "PYTORCH_CUDA_ALLOC_CONF":"expandable_segments:True"
+            },
+            //     "TORCH_LOGS": "+dynamo,dynamic,+dtensor,c10d,bytecode,+inductor",
+            //     "TORCH_LOGS_OUT": "test_try_find_inductor_nanogpt_split.txt"
+            // },
+            "justMyCode": false
+        },
+        {
+            "name": "Compiled 1D FSDP2",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/usr/local/bin/torchrun",
+            "console": "integratedTerminal",
+            "cwd": "/workspace/torchtitan",
+            "args": [
+                "--nproc_per_node", "8",
+                "--rdzv_backend", "c10d",
+                "--rdzv_endpoint", "localhost:0",
+                "--local-ranks-filter", "0",
+                "--role", "rank",
+                "--tee", "3",
+                "train.py",
+                "--job.config_file", "./train_configs/llama2_7b.toml",
+                "--training.steps", "1"
+            ],
+            "env": {
+                "PYTORCH_CUDA_ALLOC_CONF":"expandable_segments:True",
+                "TORCH_COMPILE_CALL_JS":"True"
+            },
+            //     "TORCH_LOGS": "+dynamo,dynamic,+dtensor,c10d,bytecode,+inductor",
+            //     "TORCH_LOGS_OUT": "test_try_find_inductor_nanogpt_split.txt"
+            // },
+            "justMyCode": false
+        },
+        {
+            "name": "Compiled 2D TP+FSDP2",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/usr/local/bin/torchrun",
+            "console": "integratedTerminal",
+            "cwd": "/workspace/torchtitan",
+            "args": [
+                "--nproc_per_node", "8",
+                "--rdzv_backend", "c10d",
+                "--rdzv_endpoint", "localhost:0",
+                "--local-ranks-filter", "0",
+                "--role", "rank",
+                "--tee", "3",
+                "train.py",
+                "--job.config_file", "./train_configs/llama2_7b_tp.toml",
+                "--training.steps", "1"
+            ],
+            "env": {
+                "PYTORCH_CUDA_ALLOC_CONF":"expandable_segments:True",
+                "TORCH_COMPILE_CALL_JS":"True"
+            },
+            //     "TORCH_LOGS": "+dynamo,dynamic,+dtensor,c10d,bytecode,+inductor",
+            //     "TORCH_LOGS_OUT": "test_try_find_inductor_nanogpt_split.txt"
+            // },
+            "justMyCode": false
+        },
+    ]
+}

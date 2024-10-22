@@ -255,6 +255,8 @@ def main(job_config: JobConfig):
         f"total steps {job_config.training.steps} "
         f"(warmup {job_config.training.warmup_steps})"
     )
+    if 'TORCH_COMPILE_CALL_JS' in os.environ:
+        model = torch.compile(model)
     with maybe_enable_profiling(
         job_config, global_step=train_state.step
     ) as torch_profiler, maybe_enable_memory_snapshot(
