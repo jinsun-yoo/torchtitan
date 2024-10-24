@@ -133,8 +133,8 @@
             ],
             "env": {
                 "PYTORCH_CUDA_ALLOC_CONF":"expandable_segments:True",
-                "TORCH_LOGS": "+dynamo,dynamic,+dtensor",//,c10d,bytecode,+inductor",
-                "TORCH_LOGS_OUT": "logs_compiled_TP.txt",
+                //"TORCH_LOGS": "+dynamo,dynamic,+dtensor",//,c10d,bytecode,+inductor",
+                //"TORCH_LOGS_OUT": "logs_compiled_TP.txt",
                 "TORCH_COMPILE_CALL_JS":"True"
             },
             // },

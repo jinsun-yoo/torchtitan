@@ -256,9 +256,19 @@ def main(job_config: JobConfig):
         f"total steps {job_config.training.steps} "
         f"(warmup {job_config.training.warmup_steps})"
     )
-    if os.environ['RANK'] == '0' and 'TORCH_COMPILE_CALL_JS' in os.environ and os.environ['TORCH_COMPILE_CALL_JS']:
-        apply_compile(model)
-        #model = torch.compile(model)
+    compile_idx = 0
+    def custom_backend(gm: torch.fx.GraphModule, example_input):
+        nonlocal compile_idx
+        if compile_idx == 0:
+            from torch.fx.passes.graph_drawer import FxGraphDrawer
+            g = FxGraphDrawer(gm, "graph")
+            g.get_dot_graph().write_pdf(f"whole_1d_TP_{compile_idx}.pdf")
+        print(f'call custom backend subgraph {compile_idx}')
+        compile_idx += 1
+        return gm.forward
+    if  'TORCH_COMPILE_CALL_JS' in os.environ and os.environ['TORCH_COMPILE_CALL_JS']:
+        #apply_compile(model)
+        model = torch.compile(model, backend=custom_backend)
     with maybe_enable_profiling(
         job_config, global_step=train_state.step
     ) as torch_profiler, maybe_enable_memory_snapshot(
