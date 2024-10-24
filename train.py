@@ -256,7 +256,7 @@ def main(job_config: JobConfig):
         f"total steps {job_config.training.steps} "
         f"(warmup {job_config.training.warmup_steps})"
     )
-    if os.environ['RANK'] == '0' and 'TORCH_COMPILE_CALL_JS' in os.environ:
+    if os.environ['RANK'] == '0' and 'TORCH_COMPILE_CALL_JS' in os.environ and os.environ['TORCH_COMPILE_CALL_JS']:
         apply_compile(model)
         #model = torch.compile(model)
     with maybe_enable_profiling(

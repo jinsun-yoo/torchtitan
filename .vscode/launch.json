@@ -82,7 +82,7 @@
                 "PYTORCH_CUDA_ALLOC_CONF":"expandable_segments:True",
                 "TORCH_LOGS": "+dynamo,dynamic,+dtensor",//,c10d,bytecode,+inductor",
                 "TORCH_LOGS_OUT": "logs_uncompiled_2D_FSDP+TP.txt",
-                "TORCH_COMPILE_CALL_JS":"True"
+                //"TORCH_COMPILE_CALL_JS":"False"
             },
             "justMyCode": false
         },
@@ -106,8 +106,8 @@
             ],
             "env": {
                 "PYTORCH_CUDA_ALLOC_CONF":"expandable_segments:True",
-                "TORCH_LOGS": "+dynamo,dynamic,+dtensor",//,c10d,bytecode,+inductor",
-                "TORCH_LOGS_OUT": "logs_compiled_FSDP_fix.txt",
+                //"TORCH_LOGS": "+dynamo,dynamic,+dtensor",//,c10d,bytecode,+inductor",
+                //"TORCH_LOGS_OUT": "logs_compiled_FSDP_fix.txt",
                 "TORCH_COMPILE_CALL_JS":"True"
             },
             // },

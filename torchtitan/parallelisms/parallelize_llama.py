@@ -285,8 +285,16 @@ def apply_compile(model: nn.Module):
     Apply torch.compile to each TransformerBlock, which makes compilation efficient due to
     repeated structure. Alternatively one can compile the whole model (after applying DP).
     """
+    compile_idx = 0
+    
+    def custom_backend(gm: torch.fx.GraphModule, example_input):
+        nonlocal compile_idx
+        print(f'call custom backend subgraph {compile_idx}')
+        compile_idx += 1
+        return gm.forward
+    
     for layer_id, transformer_block in model.layers.named_children():
-        transformer_block = torch.compile(transformer_block, fullgraph=True)
+        transformer_block = torch.compile(transformer_block, backend=custom_backend, fullgraph=True)
         model.layers.register_module(layer_id, transformer_block)
 
     logger.info("Compiling each TransformerBlock with torch.compile")
