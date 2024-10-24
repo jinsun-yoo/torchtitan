@@ -26,6 +26,7 @@ from torchtitan.parallelisms import (
     models_pipelining_fns,
     ParallelDims,
 )
+from torchtitan.parallelisms.parallelize_llama import apply_compile
 from torchtitan.profiling import maybe_enable_memory_snapshot, maybe_enable_profiling
 
 
@@ -255,8 +256,9 @@ def main(job_config: JobConfig):
         f"total steps {job_config.training.steps} "
         f"(warmup {job_config.training.warmup_steps})"
     )
-    if 'TORCH_COMPILE_CALL_JS' in os.environ:
-        model = torch.compile(model)
+    if os.environ['RANK'] == '0' and 'TORCH_COMPILE_CALL_JS' in os.environ:
+        apply_compile(model)
+        #model = torch.compile(model)
     with maybe_enable_profiling(
         job_config, global_step=train_state.step
     ) as torch_profiler, maybe_enable_memory_snapshot(

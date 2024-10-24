@@ -79,11 +79,11 @@
                 "--training.steps", "1"
             ],
             "env": {
-                "PYTORCH_CUDA_ALLOC_CONF":"expandable_segments:True"
+                "PYTORCH_CUDA_ALLOC_CONF":"expandable_segments:True",
+                "TORCH_LOGS": "+dynamo,dynamic,+dtensor",//,c10d,bytecode,+inductor",
+                "TORCH_LOGS_OUT": "logs_uncompiled_2D_FSDP+TP.txt",
+                "TORCH_COMPILE_CALL_JS":"True"
             },
-            //     "TORCH_LOGS": "+dynamo,dynamic,+dtensor,c10d,bytecode,+inductor",
-            //     "TORCH_LOGS_OUT": "test_try_find_inductor_nanogpt_split.txt"
-            // },
             "justMyCode": false
         },
         {
@@ -106,10 +106,37 @@
             ],
             "env": {
                 "PYTORCH_CUDA_ALLOC_CONF":"expandable_segments:True",
+                "TORCH_LOGS": "+dynamo,dynamic,+dtensor",//,c10d,bytecode,+inductor",
+                "TORCH_LOGS_OUT": "logs_compiled_FSDP_fix.txt",
                 "TORCH_COMPILE_CALL_JS":"True"
             },
-            //     "TORCH_LOGS": "+dynamo,dynamic,+dtensor,c10d,bytecode,+inductor",
-            //     "TORCH_LOGS_OUT": "test_try_find_inductor_nanogpt_split.txt"
+            // },
+            "justMyCode": false
+        },
+        {
+            "name": "Compiled 1D TP",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/usr/local/bin/torchrun",
+            "console": "integratedTerminal",
+            "cwd": "/workspace/torchtitan",
+            "args": [
+                "--nproc_per_node", "8",
+                "--rdzv_backend", "c10d",
+                "--rdzv_endpoint", "localhost:0",
+                "--local-ranks-filter", "0",
+                "--role", "rank",
+                "--tee", "3",
+                "train.py",
+                "--job.config_file", "./train_configs/llama2_7b_onlytp.toml",
+                "--training.steps", "1"
+            ],
+            "env": {
+                "PYTORCH_CUDA_ALLOC_CONF":"expandable_segments:True",
+                "TORCH_LOGS": "+dynamo,dynamic,+dtensor",//,c10d,bytecode,+inductor",
+                "TORCH_LOGS_OUT": "logs_compiled_TP.txt",
+                "TORCH_COMPILE_CALL_JS":"True"
+            },
             // },
             "justMyCode": false
         },
@@ -133,11 +160,10 @@
             ],
             "env": {
                 "PYTORCH_CUDA_ALLOC_CONF":"expandable_segments:True",
+                //"TORCH_LOGS": "+dynamo,dynamic,+dtensor",//,c10d,bytecode,+inductor",
+                //"TORCH_LOGS_OUT": "logs_compiled_2D_perlayer.txt",
                 "TORCH_COMPILE_CALL_JS":"True"
             },
-            //     "TORCH_LOGS": "+dynamo,dynamic,+dtensor,c10d,bytecode,+inductor",
-            //     "TORCH_LOGS_OUT": "test_try_find_inductor_nanogpt_split.txt"
-            // },
             "justMyCode": false
         },
     ]
