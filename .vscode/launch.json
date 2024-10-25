@@ -202,7 +202,7 @@
             "console": "integratedTerminal",
             "cwd": "/workspace/torchtitan",
             "args": [
-                "--nproc_per_node", "8",
+                "--nproc_per_node", "4",
                 "--rdzv_backend", "c10d",
                 "--rdzv_endpoint", "localhost:0",
                 "--local-ranks-filter", "0",

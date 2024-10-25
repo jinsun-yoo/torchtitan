@@ -264,11 +264,12 @@ def main(job_config: JobConfig):
         print(f'call custom backend subgraph {compile_idx}')
         rank = os.environ['RANK']
         if rank == '0':
+            print(f'insert printer with rank {rank}')
             from torch.fx.passes.graph_drawer import FxGraphDrawer
             g = FxGraphDrawer(gm, "graph")
             dg = g.get_dot_graph()
-            dg.write_raw(f'Rank{rank}_whole_1d_DDP_{compile_idx}.dot')
-            dg.write_pdf(f"Rank{rank}_whole_1d_DDP_{compile_idx}.pdf")
+            dg.write_raw(f'Rank{rank}_whole_1d_TPDDP_{compile_idx}.dot')
+            #dg.write_pdf(f"Rank{rank}_whole_1d_TPDDP_{compile_idx}.pdf")
         compile_idx += 1
         return make_boxed_func(gm.forward)
         
