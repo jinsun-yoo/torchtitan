@@ -28,6 +28,8 @@ from torchtitan.parallelisms import (
 )
 from torchtitan.parallelisms.parallelize_llama import apply_compile
 from torchtitan.profiling import maybe_enable_memory_snapshot, maybe_enable_profiling
+from functorch.compile import make_boxed_func
+from torch._dynamo.backends.common import aot_autograd
 
 
 def get_train_context(enable_loss_parallel: bool, enable_compiled_autograd: bool):
@@ -259,16 +261,24 @@ def main(job_config: JobConfig):
     compile_idx = 0
     def custom_backend(gm: torch.fx.GraphModule, example_input):
         nonlocal compile_idx
-        if compile_idx == 0:
+        print(f'call custom backend subgraph {compile_idx}')
+        rank = os.environ['RANK']
+        if rank == '0':
             from torch.fx.passes.graph_drawer import FxGraphDrawer
             g = FxGraphDrawer(gm, "graph")
-            g.get_dot_graph().write_pdf(f"whole_1d_TP_{compile_idx}.pdf")
-        print(f'call custom backend subgraph {compile_idx}')
+            dg = g.get_dot_graph()
+            dg.write_raw(f'Rank{rank}_whole_1d_DDP_{compile_idx}.dot')
+            dg.write_pdf(f"Rank{rank}_whole_1d_DDP_{compile_idx}.pdf")
         compile_idx += 1
-        return gm.forward
-    if  'TORCH_COMPILE_CALL_JS' in os.environ and os.environ['TORCH_COMPILE_CALL_JS']:
+        return make_boxed_func(gm.forward)
+        
+    if 'TORCH_COMPILE_CALL_JS' in os.environ and os.environ['TORCH_COMPILE_CALL_JS'] == 'True':
         #apply_compile(model)
-        model = torch.compile(model, backend=custom_backend)
+        torch._dynamo.config.compiled_autograd = True
+
+        model = torch.compile(model, backend=aot_autograd(fw_compiler= custom_backend))
+
+
     with maybe_enable_profiling(
         job_config, global_step=train_state.step
     ) as torch_profiler, maybe_enable_memory_snapshot(
@@ -312,6 +322,7 @@ def main(job_config: JobConfig):
                 # Non-PP forward / backward
                 with train_context():
                     pred = model(input_ids)
+                    print('reach end of forward')
                     loss = loss_fn(pred, labels)
                     # pred.shape=(bs, seq_len, vocab_size)
                     # need to free to before bwd to avoid peaking memory

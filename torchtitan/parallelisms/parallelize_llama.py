@@ -94,11 +94,11 @@ def parallelize_llama(
             else:
                 logger.info("Applied FSDP to the model")
         else:
-            if world_mesh.ndim > 1:
-                raise RuntimeError("DDP has not supported > 1D parallelism")
+            #if world_mesh.ndim > 1:
+                #raise RuntimeError("DDP has not supported > 1D parallelism")
             apply_ddp(
                 model,
-                world_mesh,
+                world_mesh["dp"],
                 enable_compile=job_config.training.compile,
                 enable_compiled_autograd=job_config.experimental.enable_compiled_autograd,
             )
@@ -350,7 +350,7 @@ def apply_ddp(
             )
         else:
             torch._dynamo.config.optimize_ddp = "ddp_optimizer"
-
+    torch._dynamo.config.optimize_ddp = "python_reducer"
     replicate(model, device_mesh=dp_mesh, bucket_cap_mb=100)
 
     logger.info("Applied DDP to the model")
