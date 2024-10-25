@@ -87,6 +87,33 @@
             "justMyCode": false
         },
         {
+            "name": "Compiled 1D DDP",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/usr/local/bin/torchrun",
+            "console": "integratedTerminal",
+            "cwd": "/workspace/torchtitan",
+            "args": [
+                "--nproc_per_node", "8",
+                "--rdzv_backend", "c10d",
+                "--rdzv_endpoint", "localhost:0",
+                "--local-ranks-filter", "0",
+                "--role", "rank",
+                "--tee", "3",
+                "train.py",
+                "--job.config_file", "./train_configs/llama2_7b_ddp.toml",
+                "--training.steps", "1"
+            ],
+            "env": {
+                "PYTORCH_CUDA_ALLOC_CONF":"expandable_segments:True",
+                //"TORCH_LOGS": "+dynamo,dynamic,+dtensor",//,c10d,bytecode,+inductor",
+                //"TORCH_LOGS_OUT": "logs_DDP.txt",
+                "TORCH_COMPILE_CALL_JS":"True"
+            },
+            // },
+            "justMyCode": false
+        },
+        {
             "name": "Compiled 1D FSDP2",
             "type": "debugpy",
             "request": "launch",
@@ -114,6 +141,33 @@
             "justMyCode": false
         },
         {
+            "name": "Compiled 1D PP",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/usr/local/bin/torchrun",
+            "console": "integratedTerminal",
+            "cwd": "/workspace/torchtitan",
+            "args": [
+                "--nproc_per_node", "8",
+                "--rdzv_backend", "c10d",
+                "--rdzv_endpoint", "localhost:0",
+                "--local-ranks-filter", "0",
+                "--role", "rank",
+                "--tee", "3",
+                "train.py",
+                "--job.config_file", "./train_configs/llama2_7b_pp.toml",
+                "--training.steps", "1"
+            ],
+            "env": {
+                "PYTORCH_CUDA_ALLOC_CONF":"expandable_segments:True",
+                //"TORCH_LOGS": "+dynamo,dynamic,+dtensor",//,c10d,bytecode,+inductor",
+                //"TORCH_LOGS_OUT": "logs_compiled_TP.txt",
+                "TORCH_COMPILE_CALL_JS":"True"
+            },
+            // },
+            "justMyCode": false
+        },
+        {
             "name": "Compiled 1D TP",
             "type": "debugpy",
             "request": "launch",
@@ -128,7 +182,34 @@
                 "--role", "rank",
                 "--tee", "3",
                 "train.py",
-                "--job.config_file", "./train_configs/llama2_7b_onlytp.toml",
+                "--job.config_file", "./train_configs/llama2_7b_tp.toml",
+                "--training.steps", "1"
+            ],
+            "env": {
+                //"PYTORCH_CUDA_ALLOC_CONF":"expandable_segments:True",
+                //"TORCH_LOGS": "+dynamo,dynamic,+dtensor",//,c10d,bytecode,+inductor",
+                //"TORCH_LOGS_OUT": "logs_compiled_TP.txt",
+                "TORCH_COMPILE_CALL_JS":"True"
+            },
+            // },
+            "justMyCode": false
+        },
+        {
+            "name": "Compiled 2D TP+DDP",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/usr/local/bin/torchrun",
+            "console": "integratedTerminal",
+            "cwd": "/workspace/torchtitan",
+            "args": [
+                "--nproc_per_node", "8",
+                "--rdzv_backend", "c10d",
+                "--rdzv_endpoint", "localhost:0",
+                "--local-ranks-filter", "0",
+                "--role", "rank",
+                "--tee", "3",
+                "train.py",
+                "--job.config_file", "./train_configs/llama2_7b_tpddp.toml",
                 "--training.steps", "1"
             ],
             "env": {
@@ -155,7 +236,7 @@
                 "--role", "rank",
                 "--tee", "3",
                 "train.py",
-                "--job.config_file", "./train_configs/llama2_7b_tp.toml",
+                "--job.config_file", "./train_configs/llama2_7b_tpfsdp.toml",
                 "--training.steps", "1"
             ],
             "env": {

@@ -5,6 +5,9 @@
 		},
 		{
 			"path": "../../../usr/local/lib/python3.10/dist-packages/torch"
+		},
+		{
+			"path": "../../chakra_fx"
 		}
 	],
 	"settings": {}
