@@ -128,8 +128,8 @@
                 "--role", "rank",
                 "--tee", "3",
                 "train.py",
-                "--job.config_file", "./train_configs/llama2_7b.toml",
-                "--training.steps", "1"
+                "--job.config_file", "./train_configs/llama2_7b_fsdp.toml",
+                "--training.steps", "3"
             ],
             "env": {
                 "PYTORCH_CUDA_ALLOC_CONF":"expandable_segments:True",

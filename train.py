@@ -268,14 +268,14 @@ def main(job_config: JobConfig):
             from torch.fx.passes.graph_drawer import FxGraphDrawer
             g = FxGraphDrawer(gm, "graph")
             dg = g.get_dot_graph()
-            dg.write_raw(f'Rank{rank}_whole_1d_TPDDP_{compile_idx}.dot')
-            #dg.write_pdf(f"Rank{rank}_whole_1d_TPDDP_{compile_idx}.pdf")
+            dg.write_raw(f'Rank{rank}_whole_1d_FSDP_{compile_idx}.dot')
+            dg.write_pdf(f"Rank{rank}_whole_1d_FSDP_{compile_idx}.pdf")
         compile_idx += 1
         return make_boxed_func(gm.forward)
         
     if 'TORCH_COMPILE_CALL_JS' in os.environ and os.environ['TORCH_COMPILE_CALL_JS'] == 'True':
         #apply_compile(model)
-        torch._dynamo.config.compiled_autograd = True
+        #torch._dynamo.config.compiled_autograd = True
 
         model = torch.compile(model, backend=aot_autograd(fw_compiler= custom_backend))
 
@@ -286,6 +286,7 @@ def main(job_config: JobConfig):
         job_config, global_step=train_state.step
     ) as memory_profiler:
         while train_state.step < job_config.training.steps:
+            #torch.compiler.set_stance("force_eager" if train_state.step < 1 else "default")  # eager warmup for 1 iteration
             train_state.step += 1
             gc_handler.run(train_state.step)
 

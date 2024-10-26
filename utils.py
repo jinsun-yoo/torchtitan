@@ -2982,7 +2982,7 @@ def get_first_attr(obj, *attrs):
 
     raise AssertionError(f"{obj} does not has any of the attributes: {attrs}")
 
-
+compile_idx = 100
 @contextlib.contextmanager
 def maybe_enable_compiled_autograd(should_enable, fullgraph=True, dynamic=True):
     if not should_enable:
@@ -2991,23 +2991,23 @@ def maybe_enable_compiled_autograd(should_enable, fullgraph=True, dynamic=True):
 
         def compiler_fn(gm):
             def inner_compiler(gm_, example_inputs_):
+                global compile_idx
                 torch._dynamo.utils.counters["compiled_autograd"]["compiles"] += 1
-                compile_idx = 2
                 print(f'call custom backend subgraph inner {compile_idx}')
                 rank = os.environ['RANK']
                 if rank == '0':
-                    print(f'insert printer inner with rank {rank}')
+                    print(f'insert backprop printer inner with rank {rank}')
                     from torch.fx.passes.graph_drawer import FxGraphDrawer
                     g = FxGraphDrawer(gm_, "graph")
                     dg = g.get_dot_graph()
-                    dg.write_raw(f'Rank{rank}_whole_1d_DDP_{compile_idx}.dot')
-                    #dg.write_pdf(f"Rank{rank}_whole_1d_DDP_{compile_idx}.pdf")
+                    dg.write_raw(f'Rank{rank}_whole_1d_FSDP_{compile_idx}.dot')
+                    dg.write_pdf(f"Rank{rank}_whole_1d_FSDP_{compile_idx}.pdf")
                 compile_idx += 1
                 #return make_boxed_func(gm.forward)
                 return torch._inductor.compile(gm_, example_inputs_)
 
             return torch.compile(
-                gm, backend=inner_compiler, fullgraph=fullgraph, dynamic=dynamic
+                gm,  fullgraph=fullgraph#, dynamic=dynamic
             )
 
         with torch._dynamo.compiled_autograd.enable(compiler_fn) as ctx:
