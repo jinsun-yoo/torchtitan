@@ -10,6 +10,7 @@ from datetime import timedelta
 
 import torch
 
+import torch._dynamo.compiled_autograd
 from torch.distributed.elastic.multiprocessing.errors import record
 
 from torchtitan import utils
@@ -29,7 +30,18 @@ from torchtitan.parallelisms import (
 from torchtitan.profiling import maybe_enable_memory_snapshot, maybe_enable_profiling
 
 from functorch.compile import make_boxed_func
+from torchtitan.utils import inner_compiler_inner, inner_compiler_fn
 from torch._dynamo.backends.common import aot_autograd
+
+torch._dynamo.config.compiled_autograd = True
+@torch.compile(fullgraph=True)
+def train(model, input_ids, labels, loss_fn):
+    pred = model(input_ids)
+    loss = loss_fn(pred, labels)
+    # pred.shape=(bs, seq_len, vocab_size)
+    # need to free to before bwd to avoid peaking memory
+    del pred
+    loss.backward()
 
 # Enable debug tracing on failure: https://pytorch.org/docs/stable/elastic/errors.html
 @record
@@ -260,23 +272,23 @@ def main(job_config: JobConfig):
 
     """
     It seems forward pass compile doesn't work well.
+    """
     def custom_backend(gm: torch.fx.GraphModule, example_input):
         print('enter backend')
         rank = os.environ['RANK']
         if rank == '0':
             for nodes in gm.graph.nodes:
                 print(nodes.target)
-        return make_boxed_func(gm.forward) 
+        return torch._inductor.compile_fx.compile_fx(gm, example_input)#gm.forward # make_boxed_func(gm.forward) 
     if True:#os.environ['RANK'] == '0':
-        model = torch.compile(model, backend = aot_autograd(fw_compiler= custom_backend), fullgraph=True)
-    """
+        model = torch.compile(model, backend = custom_backend)#= aot_autograd(fw_compiler= custom_backend))
 
     with maybe_enable_profiling(
         job_config, global_step=train_state.step
     ) as torch_profiler, maybe_enable_memory_snapshot(
         job_config, global_step=train_state.step
     ) as memory_profiler:
-        while train_state.step < job_config.training.steps:
+        while train_state.step < 2: #job_config.training.steps:
             train_state.step += 1
             gc_handler.run(train_state.step)
 
@@ -323,14 +335,20 @@ def main(job_config: JobConfig):
                     else torch.Tensor([-1.0])
                 )
             else:
+                #train(model, input_ids, labels, loss_fn)
+                
                 # Non-PP forward / backward
-                with train_context(optional_context_parallel_ctx):
+                torch.compiler.set_stance("force_eager" if train_state.step < 1 else "default")
+                #with torch._dynamo.compiled_autograd.enable(torch.compile(backend = aot_autograd(fw_compiler = inner_compiler_inner), fullgraph=True)):
+                with torch._dynamo.compiled_autograd.enable(inner_compiler_fn):#aot_autograd(fw_compiler = inner_compiler_inner), fullgraph=True)):
+                #with train_context(optional_context_parallel_ctx):
                     pred = model(input_ids)
                     loss = loss_fn(pred, labels)
                     # pred.shape=(bs, seq_len, vocab_size)
                     # need to free to before bwd to avoid peaking memory
                     del pred
                     loss.backward()
+                
 
             # clip gradients
             for m in model_parts:
