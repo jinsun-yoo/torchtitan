@@ -28,12 +28,17 @@ from torchtitan.parallelisms import (
 )
 from torchtitan.profiling import maybe_enable_memory_snapshot, maybe_enable_profiling
 
+from functorch.compile import make_boxed_func
+from torch._dynamo.backends.common import aot_autograd
 
 # Enable debug tracing on failure: https://pytorch.org/docs/stable/elastic/errors.html
 @record
 def main(job_config: JobConfig):
     init_logger()
     logger.info(f"Starting job: {job_config.job.description}")
+
+    torch._dynamo.config.skip_fsdp_hooks = False
+    torch._dynamo.config.compiled_autograd = True
 
     # used for colorful printing
     color = utils.Color if job_config.metrics.enable_color_printing else utils.NoColor
@@ -252,6 +257,20 @@ def main(job_config: JobConfig):
         f"total steps {job_config.training.steps} "
         f"(warmup {job_config.training.warmup_steps})"
     )
+
+    """
+    It seems forward pass compile doesn't work well.
+    def custom_backend(gm: torch.fx.GraphModule, example_input):
+        print('enter backend')
+        rank = os.environ['RANK']
+        if rank == '0':
+            for nodes in gm.graph.nodes:
+                print(nodes.target)
+        return make_boxed_func(gm.forward) 
+    if True:#os.environ['RANK'] == '0':
+        model = torch.compile(model, backend = aot_autograd(fw_compiler= custom_backend), fullgraph=True)
+    """
+
     with maybe_enable_profiling(
         job_config, global_step=train_state.step
     ) as torch_profiler, maybe_enable_memory_snapshot(

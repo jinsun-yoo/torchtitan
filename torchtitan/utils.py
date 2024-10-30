@@ -123,6 +123,36 @@ def create_context_parallel_ctx(
         no_restore_buffers=cp_no_restore_buffers,
     )
 
+# This is copy-pasted & modified from /usr/local/lib/python3.10/dist-packages/torch/_dynamo/utils.py::2987
+compile_idx = 100
+@contextlib.contextmanager
+def local_maybe_enable_compiled_autograd(should_enable, fullgraph=True, dynamic=True):
+    if not should_enable:
+        yield
+    else:
+
+        def compiler_fn(gm):
+            def inner_compiler(gm_, example_inputs_):
+                global compile_idx
+                torch._dynamo.utils.counters["compiled_autograd"]["compiles"] += 1
+                rank = os.environ['RANK']
+                if rank == '0':
+                    for node in gm_.graph.nodes:
+                        print(node.target, node.name)
+                    gm_.to_folder('temp')
+                    from torch.fx.passes.graph_drawer import FxGraphDrawer
+                    g = FxGraphDrawer(gm_, "graph")
+                    dg = g.get_dot_graph()
+                    dg.write_raw(f'Rank{rank}_1D_FSDP_{compile_idx}.dot')
+                compile_idx += 1
+                return torch._inductor.compile(gm_, example_inputs_)
+
+            return torch.compile(
+                gm, backend=inner_compiler, fullgraph=fullgraph, dynamic=dynamic
+            )
+
+        with torch._dynamo.compiled_autograd.enable(compiler_fn) as ctx:
+            yield ctx
 
 def get_train_context(enable_loss_parallel: bool, enable_compiled_autograd: bool):
     @contextlib.contextmanager
@@ -133,7 +163,7 @@ def get_train_context(enable_loss_parallel: bool, enable_compiled_autograd: bool
 
             if enable_compiled_autograd:
                 stack.enter_context(
-                    torch._dynamo.utils.maybe_enable_compiled_autograd(True)
+                    local_maybe_enable_compiled_autograd(True)
                 )
 
             if cp_context is not None:
