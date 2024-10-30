@@ -10,6 +10,7 @@ from datetime import timedelta
 
 import torch
 
+import torch._dynamo.compiled_autograd
 from torch.distributed.elastic.multiprocessing.errors import record
 
 from torchtitan import utils
@@ -28,8 +29,9 @@ from torchtitan.parallelisms import (
 )
 from torchtitan.profiling import maybe_enable_memory_snapshot, maybe_enable_profiling
 
-from functorch.compile import make_boxed_func
-from torch._dynamo.backends.common import aot_autograd
+from torchtitan.utils import  custom_fw_backend
+
+torch._dynamo.config.compiled_autograd = True
 
 # Enable debug tracing on failure: https://pytorch.org/docs/stable/elastic/errors.html
 @record
@@ -260,23 +262,17 @@ def main(job_config: JobConfig):
 
     """
     It seems forward pass compile doesn't work well.
-    def custom_backend(gm: torch.fx.GraphModule, example_input):
-        print('enter backend')
-        rank = os.environ['RANK']
-        if rank == '0':
-            for nodes in gm.graph.nodes:
-                print(nodes.target)
-        return make_boxed_func(gm.forward) 
-    if True:#os.environ['RANK'] == '0':
-        model = torch.compile(model, backend = aot_autograd(fw_compiler= custom_backend), fullgraph=True)
     """
+
+    # Note we cannot compile with AOT Autograd for forward pass
+    model = torch.compile(model, backend = custom_fw_backend)
 
     with maybe_enable_profiling(
         job_config, global_step=train_state.step
     ) as torch_profiler, maybe_enable_memory_snapshot(
         job_config, global_step=train_state.step
     ) as memory_profiler:
-        while train_state.step < job_config.training.steps:
+        while train_state.step < 2: #job_config.training.steps:
             train_state.step += 1
             gc_handler.run(train_state.step)
 
@@ -324,6 +320,7 @@ def main(job_config: JobConfig):
                 )
             else:
                 # Non-PP forward / backward
+                torch.compiler.set_stance("force_eager" if train_state.step < 1 else "default")
                 with train_context(optional_context_parallel_ctx):
                     pred = model(input_ids)
                     loss = loss_fn(pred, labels)

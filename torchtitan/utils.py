@@ -123,35 +123,46 @@ def create_context_parallel_ctx(
         no_restore_buffers=cp_no_restore_buffers,
     )
 
+compile_idx = 1
+
+def print_fx_graphmodule(gm: torch.fx.GraphModule, index: int):
+    #for node in gm.graph.nodes:
+        #print(node.target, node.name)
+    gm.to_folder(f'fxgraph_subgraph{index}')
+    from torch.fx.passes.graph_drawer import FxGraphDrawer
+    g = FxGraphDrawer(gm, "graph")
+    dg = g.get_dot_graph()
+    dg.write_raw(f'Rank0_1D_FSDP_subgraph_{compile_idx}.dot') 
+
+def custom_fw_backend(gm: torch.fx.GraphModule, example_input):
+    global compile_idx
+    rank = os.environ['RANK']
+    if rank == '0':
+        print_fx_graphmodule(gm, compile_idx)
+    compile_idx += 1
+    return torch._inductor.compile_fx.compile_fx(gm, example_input)
+
+def custom_bw_backend(gm):
+    def inner_compiler(gm_, example_inputs_):
+        global compile_idx
+        torch._dynamo.utils.counters["compiled_autograd"]["compiles"] += 1
+        rank = os.environ['RANK']
+        if rank == '0':
+            print_fx_graphmodule(gm_, compile_idx)
+        compile_idx += 1
+        return torch._inductor.compile(gm_, example_inputs_)
+
+    return torch.compile(
+        gm, backend=inner_compiler, fullgraph=True#, dynamic=True
+    )
+
 # This is copy-pasted & modified from /usr/local/lib/python3.10/dist-packages/torch/_dynamo/utils.py::2987
-compile_idx = 100
 @contextlib.contextmanager
 def local_maybe_enable_compiled_autograd(should_enable, fullgraph=True, dynamic=True):
     if not should_enable:
         yield
     else:
-
-        def compiler_fn(gm):
-            def inner_compiler(gm_, example_inputs_):
-                global compile_idx
-                torch._dynamo.utils.counters["compiled_autograd"]["compiles"] += 1
-                rank = os.environ['RANK']
-                if rank == '0':
-                    for node in gm_.graph.nodes:
-                        print(node.target, node.name)
-                    gm_.to_folder('temp')
-                    from torch.fx.passes.graph_drawer import FxGraphDrawer
-                    g = FxGraphDrawer(gm_, "graph")
-                    dg = g.get_dot_graph()
-                    dg.write_raw(f'Rank{rank}_1D_FSDP_{compile_idx}.dot')
-                compile_idx += 1
-                return torch._inductor.compile(gm_, example_inputs_)
-
-            return torch.compile(
-                gm, backend=inner_compiler, fullgraph=fullgraph, dynamic=dynamic
-            )
-
-        with torch._dynamo.compiled_autograd.enable(compiler_fn) as ctx:
+        with torch._dynamo.compiled_autograd.enable(custom_bw_backend) as ctx:
             yield ctx
 
 def get_train_context(enable_loss_parallel: bool, enable_compiled_autograd: bool):
