@@ -29,7 +29,33 @@ from torch.distributed.tensor.parallel import (
 from torchtitan.config_manager import JobConfig, TORCH_DTYPE_MAP
 from torchtitan.logging import logger
 from torchtitan.parallelisms.parallel_dims import ParallelDims
+import os
 
+from functorch.compile import make_boxed_func
+from torch._dynamo.backends.common import aot_autograd
+
+compile_idx = 1
+
+def print_fx_graphmodule(gm: torch.fx.GraphModule, index: int):
+    for node in gm.graph.nodes:
+        print(node.target, node.name)
+    print(gm.graph)
+    print('---')
+    print(gm.code)
+    #gm.to_folder(f'fxgraph_subgraph{index}')
+    from torch.fx.passes.graph_drawer import FxGraphDrawer
+    #g = FxGraphDrawer(gm, "graph")
+    #dg = g.get_dot_graph()
+    #dg.write_raw(f'Rank0_1D_FSDP_subgraph_{compile_idx}.dot') 
+
+def custom_fw_backend(gm: torch.fx.GraphModule, example_input):
+    global compile_idx
+    rank = os.environ['RANK']
+    if rank == '0':
+        print_fx_graphmodule(gm, compile_idx)
+    compile_idx += 1
+    return make_boxed_func(gm.forward)
+    #return torch._inductor.compile(gm, example_input)
 
 # NOTE(lty): experimental for the PT-D 24 research internship project
 def torch_spmd_parallelize(
@@ -96,7 +122,8 @@ def torch_spmd_parallelize(
         logger.info("Applied Simple FSDP to the model")
 
     if job_config.training.compile:
-        model = torch.compile(model, fullgraph=True)
+        model = torch.compile(model, fullgraph=True, backend=aot_autograd(fw_compiler=custom_fw_backend))
+        #model = torch.compile(model, fullgraph=True, backend=custom_fw_backend)#, fullgraph=True)
         logger.info("Compiling with torch.compile")
 
     return model
