@@ -261,11 +261,29 @@ def main(job_config: JobConfig):
         f"total steps {job_config.training.steps} "
         f"(warmup {job_config.training.warmup_steps})"
     )
+    from torch.profiler import ExecutionTraceObserver, profile
+
+    def trace_handler(prof):
+        print('call trace handler')
+        prof.export_chrome_trace(f"/workspace/torchtitan_intern24/kineto_trace{os.environ['RANK']}.json")
+
+
+    et = ExecutionTraceObserver()
+    et.register_callback(f"pytorch_et_{os.environ['RANK']}.json")
+    et.start()
+
     with maybe_enable_profiling(
         job_config, global_step=train_state.step
     ) as torch_profiler, maybe_enable_memory_snapshot(
         job_config, global_step=train_state.step
-    ) as memory_profiler:
+    ) as memory_profiler, profile(
+        activities=[
+            torch.profiler.ProfilerActivity.CPU,
+            torch.profiler.ProfilerActivity.CUDA,
+        ],
+        schedule=torch.profiler.schedule(wait=0, warmup=10, active=1),
+        on_trace_ready=trace_handler
+    ) as prof:       
         while train_state.step < job_config.training.steps:
             train_state.step += 1
             gc_handler.run(train_state.step)
@@ -303,12 +321,17 @@ def main(job_config: JobConfig):
             else:
                 # Non-PP forward / backward
                 with train_context():
+                    if train_state.step == 4:
+                        et.start()
                     pred = model(input_ids)
                     loss = loss_fn(pred, labels)
                     # pred.shape=(bs, seq_len, vocab_size)
                     # need to free to before bwd to avoid peaking memory
                     del pred
                     loss.backward()
+                    prof.step()
+                    if train_state.step == 4:
+                        et.stop()
 
             # clip gradients
             for m in model_parts:
@@ -416,7 +439,8 @@ def main(job_config: JobConfig):
                     timeout=timedelta(seconds=job_config.comm.train_timeout_seconds),
                     world_mesh=world_mesh,
                 )
-
+    et.stop()
+    et.unregister_callback()
     if torch.distributed.get_rank() == 0:
         logger.info("Sleeping 2 seconds for other ranks to complete")
         time.sleep(2)
