@@ -164,10 +164,6 @@ def apply_tp(
         model,
         tp_mesh,
         {
-            "tok_embeddings": RowwiseParallel(
-                input_layouts=Replicate(),
-                output_layouts=Shard(1),
-            ),
             "norm": SequenceParallel(),
             "output": ColwiseParallel(
                 input_layouts=Shard(1),
@@ -205,22 +201,20 @@ def apply_tp(
     #       Examples can be found at https://github.com/pytorch/torchtitan/pull/437
     for transformer_block in model.layers.values():
         layer_plan = {
-            "attention_norm": SequenceParallel(),
             "attention": prepare_module_input(
-                input_layouts=(Shard(1), None, None),
+                input_layouts=(None, None, None),
                 desired_input_layouts=(Replicate(), None, None),
             ),
             "attention.wq": colwise_parallel(),
             "attention.wk": colwise_parallel(),
             "attention.wv": colwise_parallel(),
-            "attention.wo": rowwise_parallel(output_layouts=Shard(1)),
-            "ffn_norm": SequenceParallel(),
+            "attention.wo": rowwise_parallel(output_layouts=None),
             "feed_forward": prepare_module_input(
-                input_layouts=(Shard(1),),
+                input_layouts=(None,),
                 desired_input_layouts=(Replicate(),),
             ),
             "feed_forward.w1": colwise_parallel(),
-            "feed_forward.w2": rowwise_parallel(output_layouts=Shard(1)),
+            "feed_forward.w2": rowwise_parallel(output_layouts=None),
             "feed_forward.w3": colwise_parallel(),
         }
 
