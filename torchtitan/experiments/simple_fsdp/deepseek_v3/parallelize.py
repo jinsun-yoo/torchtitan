@@ -155,9 +155,9 @@ def parallelize_deepseekv3(
             mp_policy=mp_policy,
         )
 
-        logger.info(
-            "Applied Data Parallel (simple_fsdp) (dp mode=%s) to the model", dp_mode
-        )
+        # logger.info(
+        #     "Applied Data Parallel (simple_fsdp) (dp mode=%s) to the model", dp_mode
+        # )
 
     if job_config.compile.enable:
         torch._inductor.config.reorder_for_peak_memory = False
