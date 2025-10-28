@@ -75,6 +75,8 @@ class ExpertParallel(ParallelStyle):
     # performing all-to-all dispatch on the input
     def _token_dispatch(self, mod, inputs, device_mesh):
         # annotate module input placements/sharding with input_layouts
+        # shape of routed_input is  (bs*slen*top_k, dim), where
+        # total # token is bs*slen*top_k
         routed_input, num_tokens_per_expert = inputs
         ep_degree = device_mesh.shape[0]
         num_local_experts = num_tokens_per_expert.shape[0] // ep_degree
@@ -82,35 +84,27 @@ class ExpertParallel(ParallelStyle):
         # generate the input splits and output splits for all-to-all
         with torch.no_grad():
             num_tokens_per_expert_group = all_to_all_single(
-                num_tokens_per_expert,
-                None,
-                None,
-                group=device_mesh.get_group(),
+            num_tokens_per_expert,
+            None,
+            None,
+            group=device_mesh.get_group(),
             )
             # Need to wait explicitly because it is used by a triton kernel later
             # which doesn't realize that AsyncCollectiveTensor needs unwrapping
             num_tokens_per_expert_group = torch.ops._c10d_functional.wait_tensor(
-                num_tokens_per_expert_group
+            num_tokens_per_expert_group
             )
-            input_splits = (
-                num_tokens_per_expert.view(ep_degree, -1)
-                .sum(dim=1)
-                .to(torch.device("cpu"), non_blocking=True)
-            )
-            # NOTE: this would incur a device-to-host sync
-            output_splits = (
-                num_tokens_per_expert_group.view(ep_degree, -1)
-                .sum(dim=1)
-                .to(torch.device("cpu"), non_blocking=False)
-            )
-            self.input_splits = input_splits.tolist()
-            self.output_splits = output_splits.tolist()
+            # create new tensors with same shapes filled with 3
+            # self.input_splits = torch.full_like(num_tokens_per_expert, routed_input.shape[0] // ep_degree)
+            # self.output_splits = torch.full_like(num_tokens_per_expert_group, routed_input.shape[0] // ep_degree)
 
         # perform all-to-all
         routed_input = all_to_all_single_autograd(
             routed_input,
-            self.output_splits,
-            self.input_splits,
+            None,
+            None,
+            # self.output_splits,
+            # self.input_splits,
             device_mesh.get_group(),
         )
 
@@ -152,8 +146,10 @@ class ExpertParallel(ParallelStyle):
 
         routed_output = all_to_all_single_autograd(
             routed_output,
-            self.input_splits,
-            self.output_splits,
+            None,
+            None,
+            # self.input_splits,
+            # self.output_splits,
             device_mesh.get_group(),
         )
         return routed_output
