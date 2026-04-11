@@ -623,12 +623,13 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
                 ):
                     with self.loss_fn.no_rescale():
                         self.validator.validate(self.model_parts, self.step)
+                torch.cuda.synchronize()
 
                 # signal the profiler that the next profiling step has started
-                if torch_profiler:
-                    torch_profiler.step()
-                if memory_profiler:
-                    memory_profiler.step()
+                # if torch_profiler:
+                #     torch_profiler.step()
+                # if memory_profiler:
+                #     memory_profiler.step()
 
                 # reduce timeout after first train step for faster signal
                 # (assuming lazy init and compilation are finished)
