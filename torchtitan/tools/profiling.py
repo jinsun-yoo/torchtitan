@@ -13,6 +13,7 @@ import torch
 
 from torchtitan.config import Profiling as ProfilingConfig
 from torchtitan.tools.logging import logger
+from torch.profiler import ExecutionTraceObserver, profile
 
 # how much memory allocation/free ops to record in memory snapshots
 MEMORY_SNAPSHOT_MAX_ENTRIES = 100000
@@ -39,16 +40,16 @@ def maybe_enable_profiling(
 
         rank = torch.distributed.get_rank()
 
-        def trace_handler(prof):
-            curr_trace_dir_name = "iteration_" + str(prof.step_num)
-            curr_trace_dir = os.path.join(trace_dir, curr_trace_dir_name, leaf_folder)
-            if not os.path.exists(curr_trace_dir):
-                os.makedirs(curr_trace_dir, exist_ok=True)
+        if not os.path.exists(trace_dir):
+            os.makedirs(trace_dir, exist_ok=True)
+        et = ExecutionTraceObserver()
+        et.register_callback(f"{trace_dir}/pytorch_et_rank_{rank}.json")
 
+        def trace_handler(prof):
             logger.info(f"Dumping profiler traces at step {prof.step_num}")
             begin = time.monotonic()
 
-            output_file = os.path.join(curr_trace_dir, f"rank{rank}_trace.json")
+            output_file = os.path.join(trace_dir, f"kineto_rank{rank}_trace.json")
             prof.export_chrome_trace(output_file)
             logger.info(
                 f"Finished dumping profiler traces in {time.monotonic() - begin:.2f} seconds"
@@ -63,6 +64,7 @@ def maybe_enable_profiling(
         assert (
             wait >= 0
         ), "profile_freq must be greater than or equal to warmup + active"
+        print(f"Profiler will wait for {wait} steps, warmup for {warmup} steps, then be active for {active} steps, global steps {global_step}.")
         gpu_device_profiled = None
         if torch.cuda.is_available():
             gpu_device_profiled = torch.profiler.ProfilerActivity.CUDA
@@ -75,6 +77,7 @@ def maybe_enable_profiling(
             ],
             schedule=torch.profiler.schedule(wait=wait, warmup=warmup, active=active),
             on_trace_ready=trace_handler,
+            execution_trace_observer=et,
             record_shapes=True,
         ) as torch_profiler:
             torch_profiler.step_num = global_step
