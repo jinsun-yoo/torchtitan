@@ -398,7 +398,7 @@ class DeepSeekV3Model(nn.Module, ModelProtocol):
                 B = 1
             case "block_causal":
                 B = input_batch.shape[0]
-                mask_mods.append(get_document_mask_mod(input_batch, tokenizer.eos_id))
+                mask_mods.append(get_document_mask_mod(input_batch, 0))
             case _:
                 raise ValueError(
                     f"Unknown attention mask type: {self.model_args.attn_mask_type}"

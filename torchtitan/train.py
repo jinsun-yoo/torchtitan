@@ -41,7 +41,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
 
     # swappable training components in TrainSpec
     tokenizer: train_spec_module.BaseTokenizer | None
-    dataloader: train_spec_module.BaseDataLoader
+    dataloader: train_spec_module.BaseDataLoader | None
     model_parts: list[torch.nn.Module]
     loss_fn: train_spec_module.LossFunction
     optimizers: train_spec_module.OptimizersContainer
@@ -123,19 +123,9 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         )
         self.train_spec = train_spec_module.get_train_spec(job_config.model.name)
 
-        # build tokenizer and dataloader
-        self.tokenizer = (
-            self.train_spec.build_tokenizer_fn(job_config)
-            if self.train_spec.build_tokenizer_fn is not None
-            else None
-        )
-
-        self.dataloader = self.train_spec.build_dataloader_fn(
-            dp_world_size=dp_degree,
-            dp_rank=dp_rank,
-            tokenizer=self.tokenizer,
-            job_config=job_config,
-        )
+        # Use synthetic inputs only: skip tokenizer and dataloader setup.
+        self.tokenizer = None
+        self.dataloader = None
 
         # build model (using meta init)
         model_args = self.train_spec.model_args[job_config.model.flavor]
@@ -150,6 +140,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
             torch.device("meta"),
             utils.set_default_dtype(TORCH_DTYPE_MAP[job_config.training.dtype]),
         ):
+            print(f"dtype is {job_config.training.dtype}")
             model = self.train_spec.model_cls(model_args)
 
         # Build the collection of model converters. No-op if `model.converters` empty
@@ -504,10 +495,18 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         parallel_dims = self.parallel_dims
 
         accumulated_losses = []
+        seq_len = self.job_config.training.seq_len
+        batch_size = self.job_config.training.local_batch_size
+
         # If data runs out during gradient accumulation, that
         # entire step will not be executed.
         for _microbatch in range(self.gradient_accumulation_steps):
-            input_dict, labels = next(data_iterator)
+            input_tokens = torch.zeros(
+                (batch_size, seq_len), dtype=torch.int64, device=self.device
+            )
+            print(f"Self.device is {self.device}, input_tokens device is {input_tokens.device}")
+            input_dict = {"input": input_tokens}
+            labels = torch.zeros_like(input_tokens)
             loss = self.forward_backward_step(input_dict, labels)
             accumulated_losses.append(loss.detach())
 
@@ -603,7 +602,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
                 ),
             ),
         ):
-            data_iterator = self.batch_generator(self.dataloader)
+            data_iterator = None
             while self.should_continue_training():
                 self.step += 1
                 self.gc_handler.run(self.step)
