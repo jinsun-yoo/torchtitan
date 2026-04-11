@@ -1,15 +1,15 @@
 # NOTE: this toml config is a preset for 64 A100 GPUs.
 
 [job]
-dump_folder = "./outputs"
-description = "Llama 3 8B training"
+dump_folder = "./outputs/champollion/llama3_70b_dp_4"
+description = "Llama 3 70B training"
 
 [profiling]
-enable_profiling = false
+enable_profiling = true
 save_traces_folder = "profile_trace"
-profile_freq = 35
-profiler_warmup = 5
-profiler_active = 30
+profile_freq = 1 
+profiler_warmup = 0
+profiler_active = 1
 enable_memory_snapshot = true
 save_memory_snapshot_folder = "memory_trace"
 
@@ -20,29 +20,28 @@ save_tb_folder = "tb"
 
 [model]
 name = "llama3"
-flavor = "8B"
-hf_assets_path = "./tests/assets/tokenizer"
-#hf_assets_path = "./assets/hf/Llama-3.1-8B"
+flavor = "70B"
+hf_assets_path = "./assets/hf/Llama-3.1-70B"
 # converters = ["float8"]
 
 [optimizer]
 name = "AdamW"
-lr = 3e-4
+lr = 1.5e-4
 eps = 1e-8
 
 [lr_scheduler]
 warmup_steps = 0  # lr scheduler warm up
 
 [training]
-local_batch_size = 4
+local_batch_size = 1
 seq_len = 1024
 max_norm = 1.0  # grad norm clipping
-steps = 35
+steps = 1
 dataset = "c4_test"
 
 [parallelism]
-data_parallel_replicate_degree = 1
-data_parallel_shard_degree = -1 
+data_parallel_replicate_degree = 4
+data_parallel_shard_degree = -1
 tensor_parallel_degree = 1
 pipeline_parallel_degree = 1
 context_parallel_degree = 1

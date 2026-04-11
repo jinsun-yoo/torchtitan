@@ -1,20 +1,21 @@
 # NOTE: this toml config is a preset for 64 A100 GPUs.
 
 [job]
-dump_folder = "./outputs"
+dump_folder = "./outputs/8b_tp8_fsdp2"
 description = "Llama 3 8B training"
+print_config = true
 
 [profiling]
-enable_profiling = false
+enable_profiling = true
 save_traces_folder = "profile_trace"
-profile_freq = 35
+profile_freq = 6
 profiler_warmup = 5
-profiler_active = 30
-enable_memory_snapshot = true
+profiler_active = 1
+enable_memory_snapshot = false
 save_memory_snapshot_folder = "memory_trace"
 
 [metrics]
-log_freq = 10
+log_freq = 100
 enable_tensorboard = false
 save_tb_folder = "tb"
 
@@ -37,13 +38,13 @@ warmup_steps = 0  # lr scheduler warm up
 local_batch_size = 4
 seq_len = 1024
 max_norm = 1.0  # grad norm clipping
-steps = 35
+steps = 6
 dataset = "c4_test"
 
 [parallelism]
 data_parallel_replicate_degree = 1
-data_parallel_shard_degree = -1 
-tensor_parallel_degree = 1
+data_parallel_shard_degree = -1
+tensor_parallel_degree = 8
 pipeline_parallel_degree = 1
 context_parallel_degree = 1
 fsdp_reshard_after_forward = "default"

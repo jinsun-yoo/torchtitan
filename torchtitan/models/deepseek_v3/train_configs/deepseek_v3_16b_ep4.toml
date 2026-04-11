@@ -1,12 +1,14 @@
 [job]
-dump_folder = "./outputs"
+dump_folder = "./outputs/champollion/deepseek/16b_ep4"
 description = "DeepSeek-V3 16B model training"
-print_config = false
+print_config = true
 
 [profiling]
-enable_profiling = false
+enable_profiling = true
 save_traces_folder = "profile_trace"
-profile_freq = 10
+profile_freq = 1
+profiler_warmup = 0
+profiler_active = 1
 enable_memory_snapshot = false
 save_memory_snapshot_folder = "memory_snapshot"
 
@@ -29,7 +31,7 @@ lr = 2.2e-4
 eps = 1e-8
 
 [lr_scheduler]
-warmup_steps = 200  # lr scheduler warm up, normally 20% of the train steps
+warmup_steps = 0  # lr scheduler warm up, normally 20% of the train steps
 decay_ratio = 0.8  # lr scheduler decay ratio, 80% of the train steps
 decay_type = "cosine"
 min_lr_factor = 0.1
@@ -38,7 +40,7 @@ min_lr_factor = 0.1
 local_batch_size = 4
 seq_len = 4096
 max_norm = 1.0  # grad norm clipping
-steps = 1000
+steps = 1
 dataset = "c4"  # supported datasets: c4_test (2K), c4 (177M)
 
 [parallelism]
@@ -49,7 +51,7 @@ tensor_parallel_degree = 1
 enable_async_tensor_parallel = false
 pipeline_parallel_degree = 1
 pipeline_parallel_schedule = "Interleaved1F1B"
-expert_parallel_degree = 8
+expert_parallel_degree = 4
 expert_tensor_parallel_degree = 1
 
 [checkpoint]
