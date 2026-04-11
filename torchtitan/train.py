@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import importlib
+import json
 import os
 import time
 from datetime import timedelta
@@ -99,6 +100,24 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         )
 
         world_mesh = parallel_dims.world_mesh
+
+        # Dump all process group names and their global ranks to a JSON file that
+        # astra-sim's Workload::initialize_comm_group can parse.
+        # Format: {"group_name": [rank0, rank1, ...], ...}
+        import torch.distributed.distributed_c10d as _c10d
+
+        pg_dump: dict[str, list[int]] = {}
+        for pg, name in _c10d._world.pg_names.items():
+            ranks = torch.distributed.get_process_group_ranks(pg)
+            pg_dump[name] = sorted(ranks)
+        dump_path = os.path.join(
+            job_config.job.dump_folder, "profile_trace", f"comm_groups_{torch.distributed.get_rank()}.json"
+        )
+        os.makedirs(os.path.join(job_config.job.dump_folder, "profile_trace"), exist_ok=True)
+        with open(dump_path, "w") as f:
+            json.dump(pg_dump, f, indent=2)
+        logger.info(f"Process group info written to {dump_path}")
+
         if parallel_dims.dp_enabled:
             dp_mesh = world_mesh["dp"]
             dp_degree, dp_rank = dp_mesh.size(), dp_mesh.get_local_rank()
