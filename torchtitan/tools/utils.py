@@ -25,8 +25,31 @@ def has_cuda_capability(major: int, minor: int) -> bool:
 
 
 def get_device_info() -> tuple[str, torch.device]:
+    import os
+    import sys
     device_type = _get_available_device_type() or "cuda"
-    device_module = _get_device_module(device_type)  # default device_module:torch.cuda
+    
+    flint_smaller_alloc = os.environ.get("FLINT_SMALLER_ALLOC", "False").lower() == "true"
+    
+    if device_type == "cuda":
+        if flint_smaller_alloc:
+            # User explicitly indicates GPU allocation is smaller than number of processes.
+            # Use CPU for DeviceMesh to avoid device conflicts.
+            logger.info("FLINT_SMALLER_ALLOC=True: Using CPU for DeviceMesh.")
+            device_type = "cpu"
+        else:
+            # Sanity check: if LOCAL_RANK >= num_gpus, likely a configuration issue.
+            if "LOCAL_RANK" in os.environ:
+                local_rank = int(os.environ["LOCAL_RANK"])
+                num_gpus = torch.cuda.device_count()
+                if local_rank >= num_gpus:
+                    logger.error(
+                        f"Configuration error: LOCAL_RANK={local_rank} but only {num_gpus} GPU(s) available. "
+                        f"Either use more GPUs or set FLINT_SMALLER_ALLOC=True to use CPU for DeviceMesh."
+                    )
+                    sys.exit(1)
+    
+    device_module = _get_device_module(device_type)  # torch.cuda or torch.cpu
     return device_type, device_module
 
 
