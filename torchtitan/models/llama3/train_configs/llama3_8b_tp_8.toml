@@ -1,7 +1,7 @@
 # NOTE: this toml config is a preset for 64 A100 GPUs.
 
 [job]
-dump_folder = "./outputs/8b_tp_8_1iter_warmup"
+dump_folder = "./outputs/8b_tp_8"
 description = "Llama 3 8B training"
 print_config = true
 
