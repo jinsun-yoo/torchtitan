@@ -646,8 +646,8 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
                 torch.cuda.synchronize()
 
                 # signal the profiler that the next profiling step has started
-                # if torch_profiler:
-                #     torch_profiler.step()
+                if torch_profiler:
+                    torch_profiler.step()
                 # if memory_profiler:
                 #     memory_profiler.step()
 
