@@ -514,7 +514,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
     def train_step(
         self, data_iterator: Iterable[tuple[dict[str, torch.Tensor], torch.Tensor]]
     ):
-        # self.optimizers.zero_grad()
+        self.optimizers.zero_grad()
         # Save the current step learning rate for logging
         lr = self.lr_schedulers.schedulers[0].get_last_lr()[0]
 
@@ -530,19 +530,18 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
             loss = self.forward_backward_step(input_dict, labels)
             accumulated_losses.append(loss.detach())
 
-        # grad_norm = dist_utils.clip_grad_norm_(
-        #     [p for m in self.model_parts for p in m.parameters()],
-        #     self.job_config.training.max_norm,
-        #     foreach=True,
-        #     pp_mesh=(
-        #         parallel_dims.world_mesh["pp"] if parallel_dims.pp_enabled else None
-        #     ),
-        #     ep_enabled=parallel_dims.ep_enabled,
-        # )
-        grad_norm = None  # Placeholder since grad_norm is used later in metrics
+        grad_norm = dist_utils.clip_grad_norm_(
+            [p for m in self.model_parts for p in m.parameters()],
+            self.job_config.training.max_norm,
+            foreach=True,
+            pp_mesh=(
+                parallel_dims.world_mesh["pp"] if parallel_dims.pp_enabled else None
+            ),
+            ep_enabled=parallel_dims.ep_enabled,
+        )
         self.checkpointer.maybe_wait_for_staging()
-        # self.optimizers.step()
-        # self.lr_schedulers.step()
+        self.optimizers.step()
+        self.lr_schedulers.step()
 
         # Reduce the data collected over gradient accumulation steps.
         loss = torch.sum(torch.stack(accumulated_losses))
@@ -573,13 +572,13 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
             "n_tokens_seen": global_ntokens_seen,
             "lr": lr,
         }
-        # self.metrics_processor.log(
-        #     self.step,
-        #     global_avg_loss,
-        #     global_max_loss,
-        #     grad_norm.item(),
-        #     extra_metrics=extra_metrics,
-        # )
+        self.metrics_processor.log(
+            self.step,
+            global_avg_loss,
+            global_max_loss,
+            grad_norm.item(),
+            extra_metrics=extra_metrics,
+        )
 
     @record
     def train(self):
