@@ -112,9 +112,9 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
                 ranks = torch.distributed.get_process_group_ranks(pg)
                 pg_dump[name] = sorted(ranks)
             dump_path = os.path.join(
-                job_config.job.dump_folder, "comm_groups.json"
+                job_config.job.dump_folder, "profile_trace", "comm_groups.json"
             )
-            os.makedirs(job_config.job.dump_folder, exist_ok=True)
+            os.makedirs(os.path.join(job_config.job.dump_folder, "profile_trace"), exist_ok=True)
             with open(dump_path, "w") as f:
                 json.dump(pg_dump, f, indent=2)
             logger.info(f"Process group info written to {dump_path}")
@@ -647,8 +647,8 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
                 torch.cuda.synchronize()
 
                 # signal the profiler that the next profiling step has started
-                # if torch_profiler:
-                #     torch_profiler.step()
+                if torch_profiler:
+                    torch_profiler.step()
                 # if memory_profiler:
                 #     memory_profiler.step()
 
