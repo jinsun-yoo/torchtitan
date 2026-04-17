@@ -16,7 +16,7 @@ OUTPUT_PATH="${SCRIPT_DIR}/outputs/${SLURM_JOB_ID}"
 cd /nfs/jinsun/torchtitan
 bw-start
 source /nfs/jinsun/pythorch/bin/activate
-CONFIG_FILE="./torchtitan/models/llama3/train_configs/llama3_8b_fsdp_4.toml" bash collect_trace.sh
+CONFIG_FILE="./torchtitan/models/llama3/train_configs/llama3_8b_tp_2_multi.toml" bash collect_trace.sh
 
 source /nfs/jinsun/venv/hanjiang_chakra/bin/activate
 bw-stop

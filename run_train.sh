@@ -7,10 +7,10 @@
 
 set -ex
 # Check if running in MPI context
-if [ -z "$OMPI_COMM_WORLD_SIZE" ] && [ -z "$PMI_SIZE" ] && [ -z "$MPI_LOCALNRANKS" ]; then
-  echo "Error: Not running in MPI context. Please run with mpirun/mpiexec."
-  exit 1
-fi
+# if [ -z "$OMPI_COMM_WORLD_SIZE" ] && [ -z "$PMI_SIZE" ] && [ -z "$MPI_LOCALNRANKS" ]; then
+#   echo "Error: Not running in MPI context. Please run with mpirun/mpiexec."
+#   exit 1
+# fi
 # mpirun -np 8 -N 1 CONFIG_FILE="" ./run_train.sh
 # use envs as local overwrites for convenience
 # e.g.
@@ -20,14 +20,24 @@ NRANK_PER_NODE=${NRANK_PER_NODE:-"1"}
 export LOG_RANK=${LOG_RANK:-0}
 CONFIG_FILE=${CONFIG_FILE:-"./torchtitan/models/llama3/train_configs/debug_model.toml"}
 TRAIN_FILE=${TRAIN_FILE:-"torchtitan.train"}
-MODEL_NAME=${MODEL_NAME:-"simple_fsdp.llama3"}
+MODEL_FLAVOR=${MODEL_FLAVOR:-"simple_fsdp.llama3"}
+# Use pre-generated RDZV_ID from parent script (collect_trace.sh), or generate one if not set
+RDZV_ID=${RDZV_ID:-$((RANDOM * 1000 + RANDOM))}
+
 
 RDZV_MASTER_HOSTNAME=${RDZV_MASTER_HOSTNAME:-"g100n052"}
 TORCHFT_LIGHTHOUSE=${TORCHFT_LIGHTHOUSE:-"$RDZV_MASTER_HOSTNAME:29510"}
 
+# For single-node runs, use localhost for rendezvous to avoid cross-node connection issues
+if [ "$NNODES" -eq 1 ]; then
+  RDZV_ENDPOINT="localhost:29500"
+else
+  RDZV_ENDPOINT="$RDZV_MASTER_HOSTNAME:29500"
+fi
+
 PYTORCH_ALLOC_CONF="expandable_segments:True" \
 TORCHFT_LIGHTHOUSE=${TORCHFT_LIGHTHOUSE} \
 torchrun --nnodes=${NNODES} --nproc-per-node=${NRANK_PER_NODE} \
-  --rdzv-id=182745 --rdzv-backend=c10d --rdzv-endpoint=$RDZV_MASTER_HOSTNAME:29500 \
-  -m ${TRAIN_FILE} --job.config_file ${CONFIG_FILE} --model.name ${MODEL_NAME} "$@"
+  --rdzv-id=$RDZV_ID --rdzv-backend=c10d --rdzv-endpoint=$RDZV_ENDPOINT \
+  -m ${TRAIN_FILE} --job.config_file ${CONFIG_FILE} --model.name ${MODEL_FLAVOR} "$@"
 #   --local-ranks-filter ${LOG_RANK} --role rank --tee 3 \
