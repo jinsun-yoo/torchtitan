@@ -6,22 +6,31 @@ CONFIG_FILE_DEFAULT="./torchtitan/models/${MODEL_NAME}/train_configs/${MODEL_NAM
 CONFIG_FILE=${CONFIG_FILE:-$CONFIG_FILE_DEFAULT}
 NNODES=${NNODES:-"4"}
 NRANK_PER_NODE=${NRANK_PER_NODE:-"1"}
+NTASKS=$((NNODES * NRANK_PER_NODE))
 
 export CONFIG_FILE=$CONFIG_FILE
 export RDZV_MASTER_HOSTNAME=$RDZV_MASTER_HOSTNAME
-export CUDA_VISIBLE_DEVICES=0
 export NNODES=$NNODES
 export NRANK_PER_NODE=$NRANK_PER_NODE
-export MODEL_NAME=$MODEL_NAME
 
-MCA_STRING=""
+export NCCL_NVML_DISABLE=1
+
 if [[ $(hostname) == *sith* ]]; then
   export NCCL_IB_HCA=mlx5_0
   export NCCL_IB_ADAPTIVE_ROUTING=0
-  # This option is needed to run mpirun in vader nodes where mpirun clashes with srun.
-  MCA_STRING="--mca btl_tcp_if_include bond0"
 fi
 
-mpirun $MCA_STRING -np $((NNODES * NRANK_PER_NODE)) -N $NRANK_PER_NODE -x CUDA_VISIBLE_DEVICES -x NCCL_NVML_DISABLE run_train.sh > \
+# Generate RDZV_ID once for all tasks to share
+export RDZV_ID=$((RANDOM * 1000 + RANDOM))
+
+# --ntasks=$NTASKS \
+# --nodes=$NNODES \
+# --ntasks-per-node=$NRANK_PER_NODE \
+srun \
+  --ntasks=$NNODES \
+  --ntasks-per-node=1 \
+  --export=ALL \
+  run_train.sh > \
 collect_${JOB_CONFIG_NAME}.log 2>&1
 
+# --gpus=$NRANK_PER_NODE \
