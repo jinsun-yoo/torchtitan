@@ -643,7 +643,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
                 ):
                     with self.loss_fn.no_rescale():
                         self.validator.validate(self.model_parts, self.step)
-                torch.cuda.synchronize()
+                # torch.cuda.synchronize()
 
                 # signal the profiler that the next profiling step has started
                 if torch_profiler:
