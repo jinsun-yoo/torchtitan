@@ -6,7 +6,6 @@ CONFIG_FILE_DEFAULT="./torchtitan/models/${MODEL_NAME}/train_configs/${MODEL_NAM
 CONFIG_FILE=${CONFIG_FILE:-$CONFIG_FILE_DEFAULT}
 NNODES=${NNODES:-"4"}
 NRANK_PER_NODE=${NRANK_PER_NODE:-"1"}
-NTASKS=$((NNODES * NRANK_PER_NODE))
 
 export CONFIG_FILE=$CONFIG_FILE
 export RDZV_MASTER_HOSTNAME=$RDZV_MASTER_HOSTNAME
@@ -23,12 +22,12 @@ fi
 # Generate RDZV_ID once for all tasks to share
 export RDZV_ID=$((RANDOM * 1000 + RANDOM))
 
-# --ntasks=$NTASKS \
-# --nodes=$NNODES \
-# --ntasks-per-node=$NRANK_PER_NODE \
+# One srun task per node; torchrun handles NRANK_PER_NODE processes per node internally
 srun \
+  --nodes=$NNODES \
   --ntasks=$NNODES \
   --ntasks-per-node=1 \
+  --distribution=block:block \
   --export=ALL \
   run_train.sh > \
 collect_${JOB_CONFIG_NAME}.log 2>&1

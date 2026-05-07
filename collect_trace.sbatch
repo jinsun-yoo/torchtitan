@@ -1,23 +1,28 @@
 #!/bin/bash
-#SBATCH --job-name=collect_chakra_champollion_8b_fsdp_4_multiiter
+#SBATCH --job-name=collect_chakra
 #SBATCH --ntasks=4
 #SBATCH --nodes=4
 #SBATCH --ntasks-per-node=1
-#SBATCH --partition=champollion
+#SBATCH --partition=krai
+#SBATCH --account=krai_users
+#SBATCH --reservation=HPCDC-29580
 #SBATCH --comment='minicol;apm'
 #SBATCH --output=outputs/%j/sbatch.out
 
 set -x
-squeue -p champollion
+squeue -p krai
 
-SCRIPT_DIR="/nfs/jinsun/torchtitan"
+ROOT_PATH="${ROOT_PATH:?}"
+SCRIPT_DIR="${ROOT_PATH}/torchtitan"
 OUTPUT_PATH="${SCRIPT_DIR}/outputs/${SLURM_JOB_ID}"
-
-cd /nfs/jinsun/torchtitan
+export RDZV_MASTER_HOSTNAME="sith5"
+export JOB_CONFIG_NAME="70b_tp_8_fsdp_4"
+export NRANK_PER_NODE=8
+cd ${SCRIPT_DIR}
 bw-start
-source /nfs/jinsun/pythorch/bin/activate
-CONFIG_FILE="./torchtitan/models/llama3/train_configs/llama3_8b_tp_2_multi.toml" bash collect_trace.sh
+source ${ROOT_PATH}/venv/genie/bin/activate
+CONFIG_FILE="${SCRIPT_DIR}/torchtitan/models/llama3/train_configs/llama3_${JOB_CONFIG_NAME}.toml" bash collect_trace.sh
 
-source /nfs/jinsun/venv/hanjiang_chakra/bin/activate
+source ${ROOT_PATH}/venv/hanjiang_chakra/bin/activate
 bw-stop
 cp *.csv outputs/${SLURM_JOB_ID}/bw_watch.csv
