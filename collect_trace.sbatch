@@ -17,6 +17,9 @@ export RDZV_MASTER_HOSTNAME="$(scontrol show hostnames "$SLURM_NODELIST" | head 
 export JOB_CONFIG_NAME="8b_pp_4"
 export NRANK_PER_NODE=1
 export NNODES=4
+export NUM_RANKS=$((NRANK_PER_NODE * NNODES))
+export DIRPATH="${SCRIPT_DIR}/outputs/champollion/8b_pp_4/profile_trace"
+rm -rf ${DIRPATH}
 cd ${SCRIPT_DIR}
 
 bw-start
@@ -26,3 +29,4 @@ CONFIG_FILE="${SCRIPT_DIR}/torchtitan/models/llama3/train_configs/llama3_${JOB_C
 
 bw-stop
 cp *.csv outputs/${SLURM_JOB_ID}/bw_watch.csv
+bash combine_trace.sh

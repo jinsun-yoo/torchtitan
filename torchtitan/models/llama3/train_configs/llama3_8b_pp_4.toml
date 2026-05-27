@@ -7,8 +7,8 @@ description = "Llama 3 8B training"
 [profiling]
 enable_profiling = true
 save_traces_folder = "profile_trace"
-profile_freq = 1
-profiler_warmup = 0
+profile_freq = 3
+profiler_warmup = 2
 profiler_active = 1
 enable_memory_snapshot = false
 save_memory_snapshot_folder = "memory_trace"
@@ -36,8 +36,8 @@ warmup_steps = 0  # lr scheduler warm up
 [training]
 local_batch_size = 4
 seq_len = 1024
-max_norm = 1.0  # grad norm clipping
-steps = 1
+max_norm = 0.0  # 0 disables gradient norm clipping (and the PP AllReduce)
+steps = 3
 dataset = "c4_test"
 
 [parallelism]
@@ -46,6 +46,7 @@ data_parallel_shard_degree = 1
 tensor_parallel_degree = 1
 pipeline_parallel_degree = 4 
 context_parallel_degree = 1
+pipeline_parallel_schedule = "GPipe"
 fsdp_reshard_after_forward = "default"
 
 [checkpoint]

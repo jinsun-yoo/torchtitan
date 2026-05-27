@@ -530,15 +530,19 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
             loss = self.forward_backward_step(input_dict, labels)
             accumulated_losses.append(loss.detach())
 
-        grad_norm = dist_utils.clip_grad_norm_(
-            [p for m in self.model_parts for p in m.parameters()],
-            self.job_config.training.max_norm,
-            foreach=True,
-            pp_mesh=(
-                parallel_dims.world_mesh["pp"] if parallel_dims.pp_enabled else None
-            ),
-            ep_enabled=parallel_dims.ep_enabled,
-        )
+        max_norm = self.job_config.training.max_norm
+        if max_norm > 0:
+            grad_norm = dist_utils.clip_grad_norm_(
+                [p for m in self.model_parts for p in m.parameters()],
+                max_norm,
+                foreach=True,
+                pp_mesh=(
+                    parallel_dims.world_mesh["pp"] if parallel_dims.pp_enabled else None
+                ),
+                ep_enabled=parallel_dims.ep_enabled,
+            )
+        else:
+            grad_norm = torch.tensor(0.0)
         self.checkpointer.maybe_wait_for_staging()
         self.optimizers.step()
         self.lr_schedulers.step()
