@@ -25,8 +25,8 @@ export RDZV_ID=$((RANDOM * 1000 + RANDOM))
 # One srun task per node; torchrun handles NRANK_PER_NODE processes per node internally
 srun \
   --nodes=$NNODES \
-  --ntasks=$((NNODES * NRANK_PER_NODE)) \
-  --ntasks-per-node=$NRANK_PER_NODE \
+  --ntasks=$NNODES \
+  --ntasks-per-node=1 \
   --distribution=block:block \
   --export=ALL \
   run_train.sh > \

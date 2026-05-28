@@ -6,10 +6,10 @@ into a single comm_groups.json in the same directory.
 Panics if the same key maps to different values across files.
 
 Usage:
-    python dedup_comm_groups.py <keyword>
+    python dedup_comm_groups.py <keyword> <cluster>
 
 Example:
-    python dedup_comm_groups.py 8b_tp_2_fsdp_2
+    python dedup_comm_groups.py 8b_tp_2_fsdp_2 champollion
 """
 
 import json
@@ -19,12 +19,14 @@ from pathlib import Path
 
 
 def main():
-    if len(sys.argv) != 2:
-        print(f"Usage: {sys.argv[0]} <keyword>", file=sys.stderr)
+    if len(sys.argv) != 3:
+        print(f"Usage: {sys.argv[0]} <keyword> <cluster>", file=sys.stderr)
         sys.exit(1)
 
     keyword = sys.argv[1]
-    trace_dir = Path("torchtitan/outputs") / keyword / "profile_trace"
+    cluster_arg = sys.argv[2]
+    cluster_string = f"{cluster_arg}" if cluster_arg else "vader"
+    trace_dir = Path("outputs") / cluster_string / keyword / "profile_trace"
     pattern = str(trace_dir / "comm_groups_*.json")
 
     files = sorted(glob(pattern))
