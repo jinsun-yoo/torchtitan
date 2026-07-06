@@ -612,6 +612,12 @@ class Checkpoint:
     without saving any during the training.
     """
 
+    delete_after_training_completion: bool = False
+    """
+    If True, delete the entire checkpoint folder after training reaches
+    training.steps. This helps ensure a subsequent run starts fresh.
+    """
+
 
 @dataclass
 class ActivationCheckpoint:

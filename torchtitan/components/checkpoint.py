@@ -273,6 +273,9 @@ class CheckpointManager:
         self.enable_first_step_checkpoint = (
             checkpoint_config.enable_first_step_checkpoint
         )
+        self.delete_after_training_completion = (
+            checkpoint_config.delete_after_training_completion
+        )
 
         # Async checkpoint related fields.
         async_mode = checkpoint_config.async_mode.lower()
@@ -814,6 +817,25 @@ class CheckpointManager:
                 "self.save_future is not None, but self.async_mode is not enabled "
                 "and fault tolerance is not active."
             )
+
+    def maybe_delete_checkpoints(self, training_completed: bool) -> None:
+        if (
+            not training_completed
+            or not self.enable
+            or self.load_only
+            or not self.delete_after_training_completion
+        ):
+            return
+
+        # Ensure pending async checkpoint tasks are complete before deletion.
+        self._async_wait()
+
+        if os.path.isdir(self.folder):
+            logger.info(
+                "Deleting checkpoint folder at end of completed training: %s",
+                self.folder,
+            )
+            shutil.rmtree(self.folder, ignore_errors=True)
 
     def _purge_stale_checkpoints(self):
         if (

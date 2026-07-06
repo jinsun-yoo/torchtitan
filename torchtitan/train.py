@@ -668,6 +668,10 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
                         world_mesh=self.parallel_dims.world_mesh,
                     )
 
+        self.checkpointer.maybe_delete_checkpoints(
+            training_completed=(self.step >= job_config.training.steps)
+        )
+
         if torch.distributed.get_rank() == 0:
             logger.info("Sleeping 2 seconds for other ranks to complete")
             time.sleep(2)
