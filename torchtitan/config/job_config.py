@@ -246,6 +246,25 @@ class Training:
     steps: int = 10000
     """How many train steps to run"""
 
+    rank_drop_step: int = -1
+    """
+    Optional boundary step for two-phase rank-drop experiments.
+    When > 0 and phase1_exit_after_rank_drop_checkpoint is True,
+    training saves a boundary checkpoint at this step and exits phase-1.
+    """
+
+    phase1_exit_after_rank_drop_checkpoint: bool = False
+    """
+    If True, the trainer exits after saving a forced checkpoint at rank_drop_step.
+    This is intended for two-phase migration workflows (N ranks -> N-1 ranks).
+    """
+
+    rank_to_drop: int = 1
+    """
+    Intended global rank to drop in phase-2 relaunch. This field is metadata only
+    for now and does not alter in-process collectives.
+    """
+
     enable_cpu_offload: bool = False
     """
     Whether to apply CPU offloading of parameters, gradients, and optimizer states in FSDP
@@ -595,6 +614,12 @@ class Checkpoint:
     after the first step to ensure checkpointing functions correctly. This is useful
     when running on a new cluster or storage to verify checkpointing without waiting
     for many steps or checkpointing too frequently. The default value is False.
+    """
+
+    skip_dataloader_load: bool = False
+    """
+    Skip loading dataloader state from checkpoint while loading all other states.
+    Useful for two-phase migration where DP world size changes between runs.
     """
 
     create_seed_checkpoint: bool = False

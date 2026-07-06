@@ -630,6 +630,10 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
             ),
         ):
             data_iterator = self.batch_generator(self.dataloader)
+            boundary_step = job_config.training.rank_drop_step
+            should_exit_after_boundary = (
+                job_config.training.phase1_exit_after_rank_drop_checkpoint
+            )
             while self.should_continue_training():
                 self.step += 1
                 self.gc_handler.run(self.step)
@@ -637,6 +641,20 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
                     self.train_step(data_iterator)
                 except DataloaderExhaustedError:
                     logger.warning("Ran out of data; last step was canceled.")
+                    break
+
+                if (
+                    should_exit_after_boundary
+                    and boundary_step > 0
+                    and self.step == boundary_step
+                ):
+                    logger.info(
+                        "Reached rank-drop boundary at step %d (configured rank_to_drop=%d). "
+                        "Saving forced boundary checkpoint and exiting phase-1.",
+                        self.step,
+                        job_config.training.rank_to_drop,
+                    )
+                    self.checkpointer.save(self.step, force=True)
                     break
 
                 self.checkpointer.save(

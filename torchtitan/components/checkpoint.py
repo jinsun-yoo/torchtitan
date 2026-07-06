@@ -269,6 +269,7 @@ class CheckpointManager:
         self.sd_adapter = sd_adapter
         self.export_dtype = TORCH_DTYPE_MAP[checkpoint_config.export_dtype]
         self.exclude_from_loading = checkpoint_config.exclude_from_loading
+        self.skip_dataloader_load = checkpoint_config.skip_dataloader_load
         self.interval = checkpoint_config.interval
         self.enable_first_step_checkpoint = (
             checkpoint_config.enable_first_step_checkpoint
@@ -467,7 +468,9 @@ class CheckpointManager:
                 self.states[MODEL].load_state_dict(state_dict)
 
     @torch.no_grad()
-    def save(self, curr_step: int, last_step: bool = False) -> None:
+    def save(
+        self, curr_step: int, last_step: bool = False, force: bool = False
+    ) -> None:
         """Save the checkpoint for the current step.
 
         This function will save the checkpoint for the current step. If ``last_step`` is
@@ -486,7 +489,7 @@ class CheckpointManager:
         if self.ft_manager:
             self._ft_save(curr_step)
 
-        if not self._should_save(curr_step, last_step):
+        if not self._should_save(curr_step, last_step, force=force):
             return
 
         begin = time.monotonic()
@@ -755,6 +758,13 @@ class CheckpointManager:
         if self.ft_manager:
             states_to_load.pop(DATALOADER)
 
+        if self.skip_dataloader_load:
+            if DATALOADER in states_to_load:
+                states_to_load.pop(DATALOADER)
+            logger.info(
+                "Skipping dataloader state load because checkpoint.skip_dataloader_load is enabled."
+            )
+
         return states_to_load
 
     def _save_last_step(self, curr_step: int) -> None:
@@ -789,9 +799,14 @@ class CheckpointManager:
             to_hf=self.last_save_in_hf,
         )
 
-    def _should_save(self, curr_step: int, last_step: bool = False) -> bool:
+    def _should_save(
+        self, curr_step: int, last_step: bool = False, force: bool = False
+    ) -> bool:
         if not self.enable or self.load_only:
             return False
+
+        if force:
+            return True
 
         if curr_step == 1 and self.enable_first_step_checkpoint:
             return True
