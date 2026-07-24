@@ -1,15 +1,15 @@
 """
 Merge all per-rank comm_groups_{r}.json files in
-  torchtitan/outputs/{keyword}/profile_trace/
+  <job_output_dir>/profile_trace/
 into a single comm_groups.json in the same directory.
 
 Panics if the same key maps to different values across files.
 
 Usage:
-    python dedup_comm_groups.py <keyword> <cluster>
+    python dedup_comm_groups.py <job_output_dir>
 
 Example:
-    python dedup_comm_groups.py 8b_tp_2_fsdp_2 champollion
+    python dedup_comm_groups.py ./outputs/vader/8b_tp_2_fsdp_2/0
 """
 
 import json
@@ -19,14 +19,11 @@ from pathlib import Path
 
 
 def main():
-    if len(sys.argv) != 3:
-        print(f"Usage: {sys.argv[0]} <keyword> <cluster>", file=sys.stderr)
+    if len(sys.argv) != 2:
+        print(f"Usage: {sys.argv[0]} <job_output_dir>", file=sys.stderr)
         sys.exit(1)
 
-    keyword = sys.argv[1]
-    cluster_arg = sys.argv[2]
-    cluster_string = f"{cluster_arg}" if cluster_arg else "vader"
-    trace_dir = Path("outputs") / cluster_string / keyword / "profile_trace"
+    trace_dir = Path(sys.argv[1]) / "profile_trace"
     pattern = str(trace_dir / "comm_groups_*.json")
 
     files = sorted(glob(pattern))

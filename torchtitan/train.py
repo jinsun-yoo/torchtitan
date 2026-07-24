@@ -508,6 +508,9 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
                 # need to free pred before bwd to avoid peaking memory
                 del pred
                 loss.backward()
+                # Synchronize all CUDA streams after backward to ensure
+                # FSDP reduce-scatter (comm) does not overlap with compute.
+                torch.cuda.synchronize()
 
         return loss
 

@@ -39,5 +39,6 @@ PYTORCH_ALLOC_CONF="expandable_segments:True" \
 TORCHFT_LIGHTHOUSE=${TORCHFT_LIGHTHOUSE} \
 torchrun --nnodes=${NNODES} --nproc-per-node=${NRANK_PER_NODE} \
   --rdzv-id=$RDZV_ID --rdzv-backend=c10d --rdzv-endpoint=$RDZV_ENDPOINT \
-  -m ${TRAIN_FILE} --job.config_file ${CONFIG_FILE} --model.name ${MODEL_FLAVOR} "$@"
+  -m ${TRAIN_FILE} --job.config_file ${CONFIG_FILE} --model.name ${MODEL_FLAVOR} \
+  ${JOB_OUTPUT_DIR:+--job.dump_folder ${JOB_OUTPUT_DIR}} "$@"
 #   --local-ranks-filter ${LOG_RANK} --role rank --tee 3 \
