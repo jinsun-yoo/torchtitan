@@ -3,6 +3,7 @@
 [job]
 dump_folder = "./outputs/8b_tp_4"
 description = "Llama 3 8B training"
+save_config_file = "config.yaml"
 
 [profiling]
 enable_profiling = true

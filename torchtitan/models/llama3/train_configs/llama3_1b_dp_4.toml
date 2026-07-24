@@ -1,8 +1,9 @@
 # NOTE: this toml config is a preset for 64 A100 GPUs.
 
 [job]
-dump_folder = "./outputs/temp/1b_dp_4"
+dump_folder = "./outputs/1b_dp_4"
 description = "Llama 3 8B training"
+save_config_file = "config.yaml"
 
 [profiling]
 enable_profiling = true

@@ -1,5 +1,5 @@
 [job]
-dump_folder = "./outputs/champollion/deepseek/16b_ep4"
+dump_folder = "./outputs/vader/16b_ep_4_tp_4"
 description = "DeepSeek-V3 16B model training"
 print_config = true
 
@@ -42,12 +42,13 @@ seq_len = 4096
 max_norm = 1.0  # grad norm clipping
 steps = 6
 dataset = "c4"  # supported datasets: c4_test (2K), c4 (177M)
+debug_moe_force_load_balance = true  # force equal EP comm sizes for profiling
 
 [parallelism]
 data_parallel_replicate_degree = 1
 data_parallel_shard_degree = -1
 fsdp_reshard_after_forward = "default" # default / never / always
-tensor_parallel_degree = 1
+tensor_parallel_degree = 4
 enable_async_tensor_parallel = false
 pipeline_parallel_degree = 1
 pipeline_parallel_schedule = "Interleaved1F1B"
