@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import json
+import toml
 
 import os
 from dataclasses import asdict, dataclass, field
@@ -13,6 +14,25 @@ from typing import Any, Literal
 import torch
 
 from torchtitan.tools.logging import logger
+
+
+def _strip_none_fields(data: dict[str, Any], prefix: str = "") -> tuple[dict[str, Any], list[str]]:
+    """Recursively drop None values, since TOML has no null type. Returns the
+    cleaned dict along with the dotted-key paths of the fields that were dropped.
+    """
+    cleaned: dict[str, Any] = {}
+    omitted: list[str] = []
+    for key, value in data.items():
+        dotted_key = f"{prefix}{key}"
+        if value is None:
+            omitted.append(dotted_key)
+        elif isinstance(value, dict):
+            nested_cleaned, nested_omitted = _strip_none_fields(value, f"{dotted_key}.")
+            cleaned[key] = nested_cleaned
+            omitted.extend(nested_omitted)
+        else:
+            cleaned[key] = value
+    return cleaned, omitted
 
 
 @dataclass
@@ -929,7 +949,13 @@ class JobConfig:
                 if torch.distributed.get_rank() == 0:
                     os.makedirs(os.path.dirname(config_file), exist_ok=True)
                     with open(config_file, "w") as f:
-                        json.dump(self.to_dict(), f, indent=2)
+                        if config_file.endswith(".toml"):
+                            cleaned, omitted = _strip_none_fields(self.to_dict())
+                            for dotted_key in omitted:
+                                f.write(f"# {dotted_key} omitted: value is None, unrepresentable in TOML\n")
+                            toml.dump(cleaned, f)
+                        else:
+                            json.dump(self.to_dict(), f, indent=2)
                 logger.info(f"Saved job configs to {config_file}")
             else:
                 logger.warning(
