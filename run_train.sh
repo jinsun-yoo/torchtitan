@@ -17,13 +17,10 @@ set -ex
 # LOG_RANK=0,1 NGPU=4 ./run_train.sh
 NNODES=${NNODES:-"4"}
 NRANK_PER_NODE=${NRANK_PER_NODE:-"1"}
-export LOG_RANK=${LOG_RANK:-0}
-CONFIG_FILE=${CONFIG_FILE:-"./torchtitan/models/llama3/train_configs/debug_model.toml"}
 TRAIN_FILE=${TRAIN_FILE:-"torchtitan.train"}
-MODEL_FLAVOR=${MODEL_FLAVOR:-"simple_fsdp.llama3"}
-# Use pre-generated RDZV_ID from parent script (collect_trace.sh), or generate one if not set
-RDZV_ID=${RDZV_ID:-$((RANDOM * 1000 + RANDOM))}
-
+CONFIG_FILE=${CONFIG_FILE:-"./torchtitan/models/llama3/train_configs/debug_model.toml"}
+# Use pre-generated RDZV_ID from the parent script, or a stable default if not set.
+RDZV_ID=${RDZV_ID:-${SLURM_JOB_ID:-456}}
 
 RDZV_MASTER_HOSTNAME=${RDZV_MASTER_HOSTNAME:-"g100n052"}
 TORCHFT_LIGHTHOUSE=${TORCHFT_LIGHTHOUSE:-"$RDZV_MASTER_HOSTNAME:29510"}
@@ -39,6 +36,17 @@ PYTORCH_ALLOC_CONF="expandable_segments:True" \
 TORCHFT_LIGHTHOUSE=${TORCHFT_LIGHTHOUSE} \
 torchrun --nnodes=${NNODES} --nproc-per-node=${NRANK_PER_NODE} \
   --rdzv-id=$RDZV_ID --rdzv-backend=c10d --rdzv-endpoint=$RDZV_ENDPOINT \
-  -m ${TRAIN_FILE} --job.config_file ${CONFIG_FILE} --model.name ${MODEL_FLAVOR} \
-  ${JOB_OUTPUT_DIR:+--job.dump_folder ${JOB_OUTPUT_DIR}} "$@"
+  -m ${TRAIN_FILE} --job.config_file ${CONFIG_FILE} \
+  ${MODEL_NAME:+--model.name ${MODEL_NAME}} \
+  ${OUTPUT_PATH:+--job.dump_folder ${OUTPUT_PATH}} \
+  ${ENABLE_MEMORY_SNAPSHOT:+--profiling.enable_memory_snapshot ${ENABLE_MEMORY_SNAPSHOT}} \
+  "$@"
+#   export LOG_RANK=${LOG_RANK:-0}
 #   --local-ranks-filter ${LOG_RANK} --role rank --tee 3 \
+# if [[ "${ENABLE_MEMORY_SNAPSHOT}" == "true" ]]; then
+#   MEMORY_SNAPSHOT_FLAG="--profiling.enable_memory_snapshot"
+# elif [[ "${ENABLE_MEMORY_SNAPSHOT}" == "false" ]]; then
+#   MEMORY_SNAPSHOT_FLAG="--profiling.no-enable-memory-snapshot"
+# else
+#   MEMORY_SNAPSHOT_FLAG=""
+# fi
