@@ -229,6 +229,9 @@ class Training:
     loaded from this path instead of downloaded.
     """
 
+    real_training: bool = False
+    """If True, consume batches from dataloader; if False, use synthetic random token batches."""
+
     local_batch_size: int = 8
     """Local batch size (i.e., per-device batch size)"""
 

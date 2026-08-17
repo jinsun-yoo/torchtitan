@@ -142,6 +142,27 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         )
         self.train_spec = train_spec_module.get_train_spec(job_config.model.name)
 
+        if not job_config.training.real_training:
+            if job_config.validation.enable:
+                raise ValueError(
+                    "training.real_training=false does not support validation; "
+                    "disable validation for synthetic profiling mode."
+                )
+            if job_config.fault_tolerance.enable:
+                raise ValueError(
+                    "training.real_training=false does not support fault tolerance; "
+                    "disable fault tolerance for synthetic profiling mode."
+                )
+            if job_config.checkpoint.enable:
+                raise ValueError(
+                    "training.real_training=false does not support checkpointing; "
+                    "disable checkpointing for synthetic profiling mode."
+                )
+            logger.warning(
+                "training.real_training=false: using synthetic random token batches; "
+                "dataloader-dependent features are disabled."
+            )
+
         # build tokenizer and dataloader
         self.tokenizer = (
             self.train_spec.build_tokenizer_fn(job_config)
@@ -149,12 +170,14 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
             else None
         )
 
-        self.dataloader = self.train_spec.build_dataloader_fn(
-            dp_world_size=dp_degree,
-            dp_rank=dp_rank,
-            tokenizer=self.tokenizer,
-            job_config=job_config,
-        )
+        self.dataloader = None
+        if job_config.training.real_training:
+            self.dataloader = self.train_spec.build_dataloader_fn(
+                dp_world_size=dp_degree,
+                dp_rank=dp_rank,
+                tokenizer=self.tokenizer,
+                job_config=job_config,
+            )
 
         # build model (using meta init)
         model_args = self.train_spec.model_args[job_config.model.flavor]
@@ -514,8 +537,42 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
 
         return loss
 
+    def _coalesce_and_alltoall_optimizer_tensors(self) -> torch.Tensor:
+        # sanity check: pure FSDP means the whole world is the dp_shard dimension
+        assert self.parallel_dims.world_size == self.parallel_dims.dp_shard
+        world_mesh = self.parallel_dims.world_mesh
+        world_size = world_mesh.size()
+        pg = world_mesh.get_group()
+
+        first_parameter = next(self.model_parts[0].parameters()).data.to_local()
+        flat = torch.empty(
+            sum(
+                parameter.data.to_local().numel()
+                for model in self.model_parts
+                for parameter in model.parameters()
+            ),
+            dtype=first_parameter.dtype,
+            device=first_parameter.device,
+        )
+
+        pad = (-flat.numel()) % world_size
+        if pad:
+            flat = torch.cat([flat, flat.new_zeros(pad)])
+
+        chunk_size = flat.numel() // world_size
+        input_list = list(flat.chunk(world_size))
+        output_list = [
+            torch.empty(chunk_size, dtype=flat.dtype, device=flat.device)
+            for _ in range(world_size)
+        ]
+        torch.distributed.all_to_all(output_list, input_list, group=pg)
+        return torch.cat(output_list)
+
     def train_step(
-        self, data_iterator: Iterable[tuple[dict[str, torch.Tensor], torch.Tensor]]
+        self,
+        data_iterator: Optional[
+            Iterable[tuple[dict[str, torch.Tensor], torch.Tensor]]
+        ],
     ):
         self.optimizers.zero_grad()
         # Save the current step learning rate for logging
@@ -529,7 +586,38 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         # If data runs out during gradient accumulation, that
         # entire step will not be executed.
         for _microbatch in range(self.gradient_accumulation_steps):
-            input_dict, labels = next(data_iterator)
+            if self.job_config.training.real_training:
+                input_dict, labels = next(data_iterator)
+            else:
+                a = self.job_config.training.local_batch_size
+                b = self.job_config.training.seq_len
+                vocab_size = (
+                    self.tokenizer.get_vocab_size()
+                    if self.tokenizer is not None
+                    else self.model_args.vocab_size
+                )
+
+                # Token ids should be integer tensors, not randn float tensors.
+                input_dict = {
+                    "input": torch.randint(
+                        0,
+                        vocab_size,
+                        (a, b),
+                        device=self.device,
+                        dtype=torch.long,
+                    )
+                }
+                labels = torch.randint(
+                    0,
+                    vocab_size,
+                    (a, b),
+                    device=self.device,
+                    dtype=torch.long,
+                )
+                ntokens_batch = labels.numel()
+                self.ntokens_seen += ntokens_batch
+                self.metrics_processor.ntokens_since_last_log += ntokens_batch
+                self.metrics_processor.data_loading_times.append(0.0)
             loss = self.forward_backward_step(input_dict, labels)
             accumulated_losses.append(loss.detach())
 
@@ -549,6 +637,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         self.checkpointer.maybe_wait_for_staging()
         self.optimizers.step()
         self.lr_schedulers.step()
+        self._coalesce_and_alltoall_optimizer_tensors()
 
         # Reduce the data collected over gradient accumulation steps.
         loss = torch.sum(torch.stack(accumulated_losses))
@@ -629,7 +718,11 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
                 ),
             ),
         ):
-            data_iterator = self.batch_generator(self.dataloader)
+            data_iterator = (
+                self.batch_generator(self.dataloader)
+                if self.job_config.training.real_training
+                else None
+            )
             boundary_step = job_config.training.rank_drop_step
             should_exit_after_boundary = (
                 job_config.training.phase1_exit_after_rank_drop_checkpoint

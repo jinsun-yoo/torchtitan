@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from functools import partial
+import os
 from typing import Any, Callable
 
 import torch
@@ -29,6 +30,24 @@ def _load_c4_dataset(dataset_path: str, split: str):
 def _process_c4_text(sample: dict[str, Any]) -> str:
     """Process C4 dataset sample text."""
     return sample["text"]
+
+
+def _configure_hf_cache_path(dp_rank: int) -> None:
+    """Optionally scope Hugging Face cache directories to a per-host or per-rank subdir."""
+    hf_cache_root = os.environ.get("HF_CACHE")
+    if not hf_cache_root:
+        return
+
+    cache_suffix = os.environ.get("HF_CACHE_SUFFIX")
+    if cache_suffix == "rank":
+        suffix = str(dp_rank)
+    else:
+        suffix = os.environ.get("HOSTNAME") or os.uname().nodename
+
+    scoped_cache = os.path.join(hf_cache_root, suffix)
+    os.environ["HF_HOME"] = scoped_cache
+    os.environ["HF_DATASETS_CACHE"] = os.path.join(scoped_cache, "datasets")
+    os.environ["HF_HUB_CACHE"] = os.path.join(scoped_cache, "hub")
 
 
 # Add your dataset here - more information at docs/datasets.md
@@ -84,10 +103,16 @@ class HuggingFaceTextDataset(IterableDataset, Stateful):
         path, dataset_loader, text_processor = _validate_dataset(
             dataset_name, dataset_path
         )
-        ds = dataset_loader(path)
+        _configure_hf_cache_path(dp_rank)
+        self._synthetic = False
+        self._vocab_size = max(tokenizer.get_vocab_size(), 2)
+
+        ds = None if self._synthetic else dataset_loader(path)
 
         self.dataset_name = dataset_name
-        self._data = split_dataset_by_node(ds, dp_rank, dp_world_size)
+        self._data = (
+            None if self._synthetic else split_dataset_by_node(ds, dp_rank, dp_world_size)
+        )
         self._tokenizer = tokenizer
         self.seq_len = seq_len
         self.infinite = infinite
@@ -98,6 +123,9 @@ class HuggingFaceTextDataset(IterableDataset, Stateful):
         self._token_buffer: list[int] = []
 
     def _get_data_iter(self):
+        if self._synthetic:
+            return self._synthetic_data_iter()
+
         # For map-style datasets, resume by skipping to the correct index
         # For iterable-style datasets, the underlying iterator already points to the correct index
         if isinstance(self._data, Dataset):
@@ -107,6 +135,21 @@ class HuggingFaceTextDataset(IterableDataset, Stateful):
                 return iter(self._data.skip(self._sample_idx))
 
         return iter(self._data)
+
+    def _synthetic_data_iter(self):
+        sample_count = 0
+        max_samples = None if self.infinite else max(1, self.seq_len)
+
+        while max_samples is None or sample_count < max_samples:
+            tokens = torch.randint(
+                low=0,
+                high=self._vocab_size,
+                size=(self.seq_len + 1,),
+                dtype=torch.long,
+            )
+            self._sample_idx += 1
+            sample_count += 1
+            yield {"input": tokens[:-1]}, tokens[1:]
 
     def __iter__(self):
         max_buffer_token_len = 1 + self.seq_len
