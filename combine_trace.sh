@@ -1,8 +1,8 @@
 set -ex
 NUM_RANKS=${NUM_RANKS:-8}
-DIRPATH=${DIRPATH:-"./outputs/default/1b_dp_4/profile_trace"}
+DIRPATH=${DIRPATH:-"${OUTPUT_PATH}/profile_trace"}
 
-source "${ROOT_DIR}/venv/genie/bin/activate"
+source "${ROOT_PATH}/venv/genie/bin/activate"
 cd ${DIRPATH}
 
 for i in $(seq 0 $((NUM_RANKS-1))); do
