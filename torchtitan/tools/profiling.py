@@ -79,6 +79,13 @@ def maybe_enable_profiling(
             on_trace_ready=trace_handler,
             execution_trace_observer=et,
             record_shapes=True,
+            # Capture CUDA_SYNC activities (cudaStreamWaitEvent/cudaEventRecord annotated with the
+            # stream and paired event-record correlation they act on), so downstream tools (e.g. HTA's
+            # critical path analysis) can resolve cross-stream dependencies deterministically instead
+            # of guessing from dispatch order.
+            experimental_config=torch._C._profiler._ExperimentalConfig(
+                enable_cuda_sync_events=True
+            ),
         ) as torch_profiler:
             torch_profiler.step_num = global_step
             yield torch_profiler
