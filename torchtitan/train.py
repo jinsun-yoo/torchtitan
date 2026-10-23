@@ -8,7 +8,7 @@ import importlib
 import json
 import os
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any, Generator, Iterable, Optional
 
 import torch
@@ -66,6 +66,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
     # additional training states
     step: int
     ntokens_seen: int
+    dummy_inputs: torch.Tensor | None
 
     # Enable debug tracing on failure: https://pytorch.org/docs/stable/elastic/errors.html
     @record
@@ -83,6 +84,8 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         self.device = torch.device(f"{device_type}:{int(os.environ['LOCAL_RANK'])}")
         # Device has to be set before creating TorchFT manager.
         device_module.set_device(self.device)
+
+        self.dummy_inputs = None
 
         # init distributed and build meshes
         dist_utils.init_distributed(
@@ -149,12 +152,16 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
             else None
         )
 
-        self.dataloader = self.train_spec.build_dataloader_fn(
-            dp_world_size=dp_degree,
-            dp_rank=dp_rank,
-            tokenizer=self.tokenizer,
-            job_config=job_config,
-        )
+        # Dataloader/HF dataset construction disabled: load_dataset() hits an
+        # NFS-backed filelock that raises OSError(116, "Stale file handle").
+        # We only use random dummy tensors for input, so skip it entirely.
+        # self.dataloader = self.train_spec.build_dataloader_fn(
+        #     dp_world_size=dp_degree,
+        #     dp_rank=dp_rank,
+        #     tokenizer=self.tokenizer,
+        #     job_config=job_config,
+        # )
+        self.dataloader = None
 
         # build model (using meta init)
         model_args = self.train_spec.model_args[job_config.model.flavor]
@@ -431,13 +438,53 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
 
             yield input_dict, labels
 
+    def random_batch_generator(
+        self,
+    ) -> Iterable[tuple[dict[str, torch.Tensor], torch.Tensor]]:
+        """Synthetic replacement for batch_generator: no dataloader/HF dataset
+        is built (see __init__), so yield random token batches directly."""
+        device_type = utils.device_type
+        local_batch_size = self.job_config.training.local_batch_size
+        seq_len = self.job_config.training.seq_len
+        vocab_size = self.model_args.vocab_size
+        while True:
+            data_load_start = time.perf_counter()
+            tokens = torch.randint(
+                0, vocab_size, (local_batch_size, seq_len), device=device_type
+            )
+            input_dict = {"input": tokens}
+            labels = tokens.clone()
+            ntokens_batch = labels.numel()
+            self.ntokens_seen += ntokens_batch
+            self.metrics_processor.ntokens_since_last_log += ntokens_batch
+            self.metrics_processor.data_loading_times.append(
+                time.perf_counter() - data_load_start
+            )
+            yield input_dict, labels
+
     def forward_backward_step(
         self, input_dict: dict[str, torch.Tensor], labels: torch.Tensor
     ) -> torch.Tensor:
         model_parts = self.model_parts
         parallel_dims = self.parallel_dims
 
-        inputs = input_dict["input"]
+        batch_shape = input_dict["input"].shape
+        batch_device = input_dict["input"].device
+        batch_dtype = input_dict["input"].dtype
+        if (
+            self.dummy_inputs is None
+            or self.dummy_inputs.shape != batch_shape
+            or self.dummy_inputs.device != batch_device
+            or self.dummy_inputs.dtype != batch_dtype
+        ):
+            self.dummy_inputs = torch.randint(
+                0,
+                self.model_args.vocab_size,
+                batch_shape,
+                device=batch_device,
+                dtype=batch_dtype,
+            )
+        inputs = self.dummy_inputs
         extra_inputs = {k: v for k, v in input_dict.items() if k != "input"}
         # For arguments, like attention_masks, we have to put them in a separate
         # dict as extra_inputs are not forwarded to other stages in PP, but
@@ -629,8 +676,17 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
                 ),
             ),
         ):
-            data_iterator = self.batch_generator(self.dataloader)
+            # data_iterator = self.batch_generator(self.dataloader)
+            data_iterator = self.random_batch_generator()
+            starttime_marker = datetime.now()
+            logger.info(
+                f"Starting training loop at time {starttime_marker.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}"
+            )
             while self.should_continue_training():
+                logger.info(
+                    f"Starting training step {self.step + 1} at time "
+                    f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}"
+                )
                 self.step += 1
                 self.gc_handler.run(self.step)
                 try:
@@ -667,6 +723,13 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
                         ),
                         world_mesh=self.parallel_dims.world_mesh,
                     )
+                logger.info(
+                    f"End training step {self.step + 1} at time "
+                    f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}"
+                )
+            logger.info(
+                f"End training loop at time {datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}, duration is {datetime.now() - starttime_marker}"
+            )
 
         if torch.distributed.get_rank() == 0:
             logger.info("Sleeping 2 seconds for other ranks to complete")
