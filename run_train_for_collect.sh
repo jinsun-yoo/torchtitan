@@ -1,7 +1,7 @@
 set -ex
 # Set envvars that need to be resolved within this script
 NNODES=${NNODES:-"4"}
-PROFILE_TRACE_PATH="${OUTPUT_PATH}/profile_trace"
+PROFILE_TRACE_PATH=${PROFILE_TRACE_PATH:-"${OUTPUT_PATH}/profile_trace"}
 if [[ -d ${PROFILE_TRACE_PATH} ]]; then
   echo "Job output directory ${PROFILE_TRACE_PATH} already exists. Exiting to avoid overwriting."
   exit 1
