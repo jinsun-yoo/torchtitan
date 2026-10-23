@@ -27,7 +27,7 @@ fi
 # Set HPE/Genie specific variables/configs here.
 export NCCL_NVML_DISABLE=1
 if [[ $(hostname) == *sith* ]]; then
-  export NCCL_IB_HCA=mlx5_0
+  export NCCL_IB_HCA=${NCCL_IB_HCA:-mlx5_0}
   export NCCL_IB_ADAPTIVE_ROUTING=0
 fi
 export PYTORCH_ALLOC_CONF="expandable_segments:True"
@@ -39,6 +39,10 @@ mpirun -np "$NNODES" -N 1 \
   -x TORCHFT_LIGHTHOUSE \
   -x NCCL_NVML_DISABLE \
   ${NCCL_IB_HCA:+-x NCCL_IB_HCA} \
+  ${NCCL_IB_HCAS:+-x NCCL_IB_HCAS} \
+  ${NCCL_P2P_DISABLE:+-x NCCL_P2P_DISABLE} \
+  ${NCCL_SHM_DISABLE:+-x NCCL_SHM_DISABLE} \
+  ${NCCL_NET:+-x NCCL_NET} \
   ${NCCL_IB_ADAPTIVE_ROUTING:+-x NCCL_IB_ADAPTIVE_ROUTING} \
   torchrun --nnodes=${NNODES} --nproc-per-node=${NRANK_PER_NODE} \
     --rdzv-id=$RDZV_ID --rdzv-backend=c10d --rdzv-endpoint=$RDZV_ENDPOINT \
