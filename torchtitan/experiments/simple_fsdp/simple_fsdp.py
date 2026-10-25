@@ -146,14 +146,17 @@ def _distribute_dtensor(
             f"Unsupported placement {dp_placements} for distributing DTensor {tensor}"
         )
 
+    # The specs must have one placement per outer mesh dim. With a 1-placement
+    # spec on the 2D HSDP mesh, the Shard would be applied to mesh dim 0
+    # (dp_replicate) instead of dp_shard, giving wrongly sized local shards.
     current_spec = DTensorSpec(
         mesh=outer_mesh,
-        placements=(Replicate(),),
+        placements=(Replicate(),) * outer_mesh.ndim,
         tensor_meta=inner_spec.tensor_meta,
     )
     target_spec = DTensorSpec(
         mesh=outer_mesh,
-        placements=(dp_placements[-1],),
+        placements=tuple(dp_placements),
         tensor_meta=inner_spec.tensor_meta,
     )
     result_tensor = redistribute_local_tensor(
