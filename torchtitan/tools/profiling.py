@@ -7,6 +7,7 @@
 import contextlib
 import os
 import pickle
+import shutil
 import time
 
 import torch
@@ -78,12 +79,33 @@ def maybe_enable_profiling(
         et = ExecutionTraceObserver()
         et.register_callback(f"{trace_dir}/pytorch_et_rank_{rank}.json")
 
+        # Opt-in (TT_PROFILE_PER_STEP_TRACES=1): keep every dumped cycle as
+        # kineto_rank{rank}_step{N}.json; kineto_rank{rank}_trace.json is a hard link to the latest one.
+        per_step = os.environ.get("TT_PROFILE_PER_STEP_TRACES", "0") == "1"
+
         def trace_handler(prof):
             logger.info(f"Dumping profiler traces at step {prof.step_num}")
             begin = time.monotonic()
 
             output_file = os.path.join(trace_dir, f"kineto_rank{rank}_trace.json")
-            prof.export_chrome_trace(output_file)
+            if per_step:
+                step_file = os.path.join(
+                    trace_dir, f"kineto_rank{rank}_step{prof.step_num}.json"
+                )
+                if os.path.exists(step_file):
+                    # Profiler exit after the last step re-fires the handler with the same step_num and a
+                    # near-empty cycle; keep it separately instead of overwriting the last real step.
+                    prof.export_chrome_trace(step_file[: -len(".json")] + "_exit.json")
+                else:
+                    prof.export_chrome_trace(step_file)
+                    if os.path.lexists(output_file):
+                        os.remove(output_file)
+                    try:
+                        os.link(step_file, output_file)
+                    except OSError:
+                        shutil.copyfile(step_file, output_file)
+            else:
+                prof.export_chrome_trace(output_file)
             logger.info(
                 f"Finished dumping profiler traces in {time.monotonic() - begin:.2f} seconds"
             )
