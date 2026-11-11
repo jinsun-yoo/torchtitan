@@ -737,6 +737,20 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
 
         logger.info("Training completed")
 
+        # Opt-in: TT_DUMP_FR=1 dumps this rank's ProcessGroupNCCL Flight Recorder (pickle, no stack traces) to
+        # $TT_DUMP_FR_DIR/fr_rank<RANK>.pkl after training (needs a Flight Recorder buffer: comm.trace_buf_size or TT_FR_BUFFER_SIZE > 0;
+        # durations need TORCH_NCCL_ENABLE_TIMING=1).
+        if os.environ.get("TT_DUMP_FR") == "1":
+            fr_dir = os.environ["TT_DUMP_FR_DIR"]
+            os.makedirs(fr_dir, exist_ok=True)
+            # let the watchdog retire the last works (duration_ms is only filled in at retirement)
+            time.sleep(float(os.environ.get("TT_DUMP_FR_WAIT_S", "3")))
+            blob = torch._C._distributed_c10d._dump_nccl_trace(True, False, False)
+            path = os.path.join(fr_dir, f"fr_rank{torch.distributed.get_rank()}.pkl")
+            with open(path, "wb") as f:
+                f.write(blob)
+            logger.info(f"Flight Recorder dumped to {path} ({len(blob)} bytes)")
+
     def should_continue_training(self) -> bool:
         return self.step < self.job_config.training.steps
 

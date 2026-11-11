@@ -76,8 +76,21 @@ def maybe_enable_profiling(
 
         if not os.path.exists(trace_dir):
             os.makedirs(trace_dir, exist_ok=True)
-        et = ExecutionTraceObserver()
-        et.register_callback(f"{trace_dir}/pytorch_et_rank_{rank}.json")
+        # Opt-out switches (default = previous behaviour, all on):
+        #   TT_PROFILE_ET=0            no ExecutionTraceObserver (no pytorch_et_rank_*.json)
+        #   TT_PROFILE_RECORD_SHAPES=0 record_shapes=False (Kineto "Input Dims/type/Strides"; Chakra takes shapes from ET)
+        #   TT_PROFILE_CUDA_SYNC=0     no enable_cuda_sync_events (no cudaStreamWaitEvent/cudaEventRecord sync records)
+        use_et = os.environ.get("TT_PROFILE_ET", "1") != "0"
+        record_shapes = os.environ.get("TT_PROFILE_RECORD_SHAPES", "1") != "0"
+        cuda_sync = os.environ.get("TT_PROFILE_CUDA_SYNC", "1") != "0"
+        et = None
+        if use_et:
+            et = ExecutionTraceObserver()
+            et.register_callback(f"{trace_dir}/pytorch_et_rank_{rank}.json")
+        logger.info(
+            f"Profiler options: execution_trace_observer={use_et} record_shapes={record_shapes} "
+            f"enable_cuda_sync_events={cuda_sync}"
+        )
 
         # Opt-in (TT_PROFILE_PER_STEP_TRACES=1): keep every dumped cycle as
         # kineto_rank{rank}_step{N}.json; kineto_rank{rank}_trace.json is a hard link to the latest one.
@@ -125,21 +138,35 @@ def maybe_enable_profiling(
             gpu_device_profiled = torch.profiler.ProfilerActivity.CUDA
         elif torch.xpu.is_available():
             gpu_device_profiled = torch.profiler.ProfilerActivity.XPU
+        # Opt-in TT_PROFILE_ACTIVITIES=cpu|cuda|cpu,cuda (default cpu,cuda = previous behaviour).
+        #   cuda: no CPU activity -> Kineto installs no RecordFunction callbacks (no cpu_op / ProfilerStep#N);
+        #         CUPTI still records kernels, memcpy/memset and cuda_runtime/driver calls with correlation ids.
+        #   cpu:  no device activity -> CUPTI activities are never enabled (RecordFunction cpu_op events only).
+        act_names = {
+            a.strip().lower()
+            for a in os.environ.get("TT_PROFILE_ACTIVITIES", "cpu,cuda").split(",")
+            if a.strip()
+        }
+        if not act_names or not act_names <= {"cpu", "cuda"}:
+            raise ValueError(f"TT_PROFILE_ACTIVITIES must be cpu, cuda or cpu,cuda; got {act_names}")
+        activities = []
+        if "cpu" in act_names:
+            activities.append(torch.profiler.ProfilerActivity.CPU)
+        if "cuda" in act_names and gpu_device_profiled is not None:
+            activities.append(gpu_device_profiled)
+        logger.info(f"Profiler activities: {activities}")
         with torch.profiler.profile(
-            activities=[
-                torch.profiler.ProfilerActivity.CPU,
-                gpu_device_profiled,
-            ],
+            activities=activities,
             schedule=torch.profiler.schedule(wait=wait, warmup=warmup, active=active),
             on_trace_ready=trace_handler,
             execution_trace_observer=et,
-            record_shapes=True,
+            record_shapes=record_shapes,
             # Capture CUDA_SYNC activities (cudaStreamWaitEvent/cudaEventRecord annotated with the
             # stream and paired event-record correlation they act on), so downstream tools (e.g. HTA's
             # critical path analysis) can resolve cross-stream dependencies deterministically instead
             # of guessing from dispatch order.
             experimental_config=torch._C._profiler._ExperimentalConfig(
-                enable_cuda_sync_events=True
+                enable_cuda_sync_events=cuda_sync
             ),
         ) as torch_profiler:
             torch_profiler.step_num = global_step

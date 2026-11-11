@@ -271,8 +271,10 @@ def init_distributed(
     _warn_overwrite_env(ASYNC_ERROR_HANDLING, SKIP_CLEANUP)
 
     # enable torch nccl flight recorder in the mode that would dump files if timeout is detected
-    _warn_overwrite_env(TRACE_BUFFER_SIZE, str(comm_config.trace_buf_size))
-    if comm_config.trace_buf_size > 0:
+    # Opt-in: TT_FR_BUFFER_SIZE=<n> overrides comm.trace_buf_size (e.g. to keep every collective of a short run).
+    trace_buf_size = int(os.environ.get("TT_FR_BUFFER_SIZE", comm_config.trace_buf_size))
+    _warn_overwrite_env(TRACE_BUFFER_SIZE, str(trace_buf_size))
+    if trace_buf_size > 0:
         # dump on timeout by default if trace buffer is enabled
         _warn_overwrite_env(DUMP_ON_TIMEOUT, "1")
         dump_dir = os.path.join(base_folder, comm_config.save_traces_folder)

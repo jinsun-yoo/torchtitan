@@ -7,12 +7,20 @@
 # This file applies the PT-D parallelisms (except pipeline parallelism) and various
 # training techniques (e.g. activation checkpointing and compile) to the Llama model.
 
+import os
+
 import torch
 import torch.nn as nn
 from torch.distributed._composable.replicate import replicate
 
 from torch.distributed.device_mesh import DeviceMesh
-from torch.distributed.fsdp import CPUOffloadPolicy, fully_shard, MixedPrecisionPolicy
+from torch.distributed.fsdp import (
+    CPUOffloadPolicy,
+    FSDPModule,
+    fully_shard,
+    MixedPrecisionPolicy,
+)
+from torch.distributed.fsdp._fully_shard._fsdp_collectives import DefaultReduceScatter
 from torch.distributed.tensor import Replicate, Shard
 from torch.distributed.tensor.parallel import (
     ColwiseParallel,
@@ -316,6 +324,31 @@ def apply_fsdp(
             reshard_after_forward=reshard_after_forward_policy == "always",
         )
     fully_shard(model, **fsdp_config)
+    if os.environ.get("TT_FSDP2_BLOCKING_RS", "0") == "1":
+        _apply_blocking_reduce_scatter(model)
+
+
+class _BlockingReduceScatter(DefaultReduceScatter):
+    """Reduce-scatter that makes the compute (default) stream wait for it, so it
+    cannot overlap with backward compute (opt-in TT_FSDP2_BLOCKING_RS=1)."""
+
+    def __call__(self, output_tensor, input_tensor, group, op, async_op=False):
+        work = super().__call__(output_tensor, input_tensor, group, op, async_op)
+        # Called inside the FSDP reduce-scatter stream context; with async_op=False
+        # that stream already waits on the NCCL stream.
+        event = torch.cuda.current_stream().record_event()
+        torch.cuda.default_stream().wait_event(event)
+        return work
+
+
+def _apply_blocking_reduce_scatter(model: nn.Module) -> None:
+    comm = _BlockingReduceScatter()
+    n = 0
+    for module in model.modules():
+        if isinstance(module, FSDPModule):
+            module.set_custom_reduce_scatter(comm)
+            n += 1
+    logger.info(f"TT_FSDP2_BLOCKING_RS=1: blocking reduce-scatter set on {n} FSDP modules")
 
 
 def apply_ddp(
